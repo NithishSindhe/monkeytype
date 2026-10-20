@@ -227,6 +227,14 @@ export type WithObjectId<T extends { _id: string }> = Omit<T, "_id"> & {
   _id: ObjectId;
 };
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Whether the string is a uuid, so it is safe to use as a postgres uuid. */
+export function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 export function omit<T extends object, K extends keyof T>(
   obj: T,
   keys: K[],
