@@ -1,13 +1,7 @@
 import * as UserDAL from "../../dal/user";
 import MonkeyError, { isFirebaseError } from "../../utils/error";
 import { MonkeyResponse } from "../../utils/monkey-response";
-import {
-  buildAgentLog,
-  omit,
-  replaceObjectId,
-  replaceObjectIds,
-  sanitizeString,
-} from "../../utils/misc";
+import { buildAgentLog, omit, sanitizeString } from "../../utils/misc";
 import { deleteAllPresets } from "../../dal/preset";
 import { deleteAll as deleteAllResults } from "../../dal/result";
 import { deleteConfig } from "../../dal/config";
@@ -237,7 +231,6 @@ type RelevantUserInfo = Omit<
   | "bananas"
   | "nameHistory"
   | "lastNameChange"
-  | "_id"
   | "lastReultHashes" //TODO fix typo
   | "note"
   | "ips"
@@ -250,7 +243,6 @@ function getRelevantUserInfo(user: UserDAL.DBUser): RelevantUserInfo {
     "bananas",
     "nameHistory",
     "lastNameChange",
-    "_id",
     "lastReultHashes", //TODO fix typo
     "note",
     "ips",
@@ -318,17 +310,14 @@ export async function getUser(req: MonkeyRequest): Promise<GetUserResponse> {
   const testActivity = generateCurrentTestActivity(userInfo.testActivity);
   const relevantUserInfo = getRelevantUserInfo(userInfo);
 
-  const resultFilterPresets: ResultFilters[] = (
-    relevantUserInfo.resultFilterPresets ?? []
-  ).map((it) => replaceObjectId(it));
+  const resultFilterPresets: ResultFilters[] =
+    relevantUserInfo.resultFilterPresets ?? [];
   delete relevantUserInfo.resultFilterPresets;
 
-  const tags = (relevantUserInfo.tags ?? []).map((it) => replaceObjectId(it));
+  const tags = relevantUserInfo.tags ?? [];
   delete relevantUserInfo.tags;
 
-  const customThemes = (relevantUserInfo.customThemes ?? []).map((it) =>
-    replaceObjectId(it),
-  );
+  const customThemes = relevantUserInfo.customThemes ?? [];
   delete relevantUserInfo.customThemes;
 
   const userData: User = {
@@ -355,10 +344,7 @@ export async function addResultFilterPreset(
     filter,
     maxPresetsPerUser,
   );
-  return new MonkeyResponse(
-    "Result filter preset created",
-    createdId.toHexString(),
-  );
+  return new MonkeyResponse("Result filter preset created", createdId);
 }
 
 export async function removeResultFilterPreset(
@@ -378,7 +364,7 @@ export async function addTag(
   const { tagName } = req.body;
 
   const tag = await UserDAL.addTag(uid, tagName);
-  return new MonkeyResponse("Tag updated", replaceObjectId(tag));
+  return new MonkeyResponse("Tag updated", tag);
 }
 
 export async function clearTagPb(
@@ -415,7 +401,7 @@ export async function getTags(req: MonkeyRequest): Promise<GetTagsResponse> {
   const { uid } = req.ctx.decodedToken;
 
   const tags = await UserDAL.getTags(uid);
-  return new MonkeyResponse("Tags retrieved", replaceObjectIds(tags));
+  return new MonkeyResponse("Tags retrieved", tags);
 }
 
 export async function getCustomThemes(
@@ -423,10 +409,7 @@ export async function getCustomThemes(
 ): Promise<GetCustomThemesResponse> {
   const { uid } = req.ctx.decodedToken;
   const customThemes = await UserDAL.getThemes(uid);
-  return new MonkeyResponse(
-    "Custom themes retrieved",
-    replaceObjectIds(customThemes),
-  );
+  return new MonkeyResponse("Custom themes retrieved", customThemes);
 }
 
 export async function addCustomTheme(
@@ -436,7 +419,7 @@ export async function addCustomTheme(
   const { name, colors } = req.body;
 
   const addedTheme = await UserDAL.addTheme(uid, { name, colors });
-  return new MonkeyResponse("Custom theme added", replaceObjectId(addedTheme));
+  return new MonkeyResponse("Custom theme added", addedTheme);
 }
 
 export async function removeCustomTheme(

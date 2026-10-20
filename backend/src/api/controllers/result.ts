@@ -1,10 +1,5 @@
 import * as ResultDAL from "../../dal/result";
-import {
-  isDevEnvironment,
-  omit,
-  replaceObjectId,
-  replaceObjectIds,
-} from "../../utils/misc";
+import { isDevEnvironment, omit } from "../../utils/misc";
 import objectHash from "object-hash";
 import Logger from "../../utils/logger";
 import "dotenv/config";
@@ -109,7 +104,7 @@ export async function getResults(
     limit,
     offset,
   });
-  return new MonkeyResponse("Results retrieved", replaceObjectIds(results));
+  return new MonkeyResponse("Results retrieved", results);
 }
 
 export async function getResultById(
@@ -119,7 +114,7 @@ export async function getResultById(
   const { resultId } = req.params;
 
   const result = await ResultDAL.getResult(uid, resultId);
-  return new MonkeyResponse("Result retrieved", replaceObjectId(result));
+  return new MonkeyResponse("Result retrieved", result);
 }
 
 export async function getLastResult(
@@ -127,7 +122,7 @@ export async function getLastResult(
 ): Promise<GetLastResultResponse> {
   const { uid } = req.ctx.decodedToken;
   const result = await ResultDAL.getLastResult(uid);
-  return new MonkeyResponse("Result retrieved", replaceObjectId(result));
+  return new MonkeyResponse("Result retrieved", result);
 }
 
 export async function updateTags(
@@ -448,7 +443,7 @@ export async function addResult(
   const data: PostResultResponse = {
     isPb,
     tagPbs,
-    insertedId: addedResult.insertedId.toHexString(),
+    insertedId: addedResult.insertedId,
     xp: xpGained.xp,
     dailyXpBonus: xpGained.dailyBonus ?? false,
     xpBreakdown: xpGained.breakdown ?? {},

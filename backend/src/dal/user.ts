@@ -1,14 +1,7 @@
 import { canFunboxGetPb, checkAndUpdatePb } from "../utils/pb";
-import * as db from "../init/db";
+import { getDb } from "../init/sql";
 import MonkeyError from "../utils/error";
-import {
-  Collection,
-  ObjectId,
-  Long,
-  type UpdateFilter,
-  type Filter,
-} from "mongodb";
-import { flattenObjectDeep, isPlainObject, WithObjectId } from "../utils/misc";
+import { isPlainObject, isUuid } from "../utils/misc";
 import { getCachedConfiguration } from "../init/configuration";
 import { getDayOfYear } from "date-fns";
 import { UTCDate } from "@date-fns/utc";
@@ -26,16 +19,13 @@ import { Mode, PersonalBest, PersonalBests } from "@monkeytype/schemas/shared";
 import { Result as ResultType } from "@monkeytype/schemas/results";
 import { isToday, isYesterday } from "@monkeytype/util/date-and-time";
 
-export type DBUserTag = WithObjectId<UserTag>;
+export type DBUserTag = UserTag;
+export type DBCustomTheme = CustomTheme;
 
-export type DBUser = Omit<
-  User,
-  "resultFilterPresets" | "tags" | "customThemes" | "isPremium" | "testActivity"
-> & {
-  _id: ObjectId;
-  resultFilterPresets?: WithObjectId<ResultFilters>[];
+export type DBUser = Omit<User, "isPremium" | "testActivity"> & {
+  resultFilterPresets?: ResultFilters[];
   tags?: DBUserTag[];
-  customThemes?: WithObjectId<CustomTheme>[];
+  customThemes?: CustomTheme[];
   autoBanTimestamps?: number[];
   ips?: string[];
   nameHistory?: string[];
@@ -47,88 +37,146 @@ export type DBUser = Omit<
 };
 
 const SECONDS_PER_HOUR = 3600;
+const MAX_TAGS = 15;
+const MAX_CUSTOM_THEMES = 20;
 
 type Result = Omit<ResultType<Mode>, "_id" | "name">;
 
-// Export for use in tests
-export const getUsersCollection = (): Collection<DBUser> =>
-  db.collection<DBUser>("users");
+const EMPTY_PERSONAL_BESTS: PersonalBests = {
+  time: {},
+  words: {},
+  quote: {},
+  zen: {},
+  custom: {},
+};
+
+type UserRow = Record<string, unknown>;
+
+function toNumber(value: unknown): number {
+  return typeof value === "string" ? Number(value) : (value as number);
+}
+
+/** Maps a users row onto the shape the rest of the backend expects. */
+function toUser(row: UserRow, tags?: DBUserTag[]): DBUser {
+  const user: DBUser = {
+    uid: row["uid"] as string,
+    name: row["name"] as string,
+    email: row["email"] as string,
+    addedAt: toNumber(row["added_at"]),
+    personalBests: (row["personal_bests"] as PersonalBests) ?? {
+      ...EMPTY_PERSONAL_BESTS,
+    },
+    completedTests: row["completed_tests"] as number,
+    startedTests: row["started_tests"] as number,
+    timeTyping: row["time_typing"] as number,
+    xp: toNumber(row["xp"]),
+    bananas: row["bananas"] as number,
+    favoriteQuotes:
+      (row["favorite_quotes"] as DBUser["favoriteQuotes"]) ?? undefined,
+    customThemes: (row["custom_themes"] as CustomTheme[]) ?? undefined,
+    resultFilterPresets:
+      (row["result_filter_presets"] as ResultFilters[]) ?? undefined,
+    testActivity: (row["test_activity"] as CountByYearAndDay) ?? undefined,
+    ips: (row["ips"] as string[]) ?? undefined,
+    nameHistory: (row["name_history"] as string[]) ?? undefined,
+    autoBanTimestamps: (
+      (row["auto_ban_timestamps"] as (string | number)[]) ?? undefined
+    )?.map(toNumber),
+    lastReultHashes: (row["last_result_hashes"] as string[]) ?? undefined,
+  };
+
+  const optional: [keyof DBUser, unknown][] = [
+    ["streak", row["streak"]],
+    ["profileDetails", row["profile_details"]],
+    ["inventory", row["inventory"]],
+    ["premium", row["premium"]],
+    ["banned", row["banned"] === true ? true : undefined],
+    ["verified", row["verified"] ?? undefined],
+    [
+      "needsToChangeName",
+      row["needs_to_change_name"] === true ? true : undefined,
+    ],
+    ["suspicious", row["suspicious"] === true ? true : undefined],
+    ["note", row["note"] ?? undefined],
+    [
+      "lastNameChange",
+      row["last_name_change"] === null || row["last_name_change"] === undefined
+        ? undefined
+        : toNumber(row["last_name_change"]),
+    ],
+  ];
+
+  const writable = user as Record<string, unknown>;
+  for (const [key, value] of optional) {
+    if (value !== null && value !== undefined) {
+      writable[key] = value;
+    }
+  }
+
+  if (tags !== undefined) user.tags = tags;
+
+  return user;
+}
+
+function toTag(row: UserRow): DBUserTag {
+  return {
+    _id: row["id"] as string,
+    name: row["name"] as string,
+    personalBests:
+      (row["personal_bests"] as PersonalBests) ?? EMPTY_PERSONAL_BESTS,
+  };
+}
+
+async function fetchTags(uid: string): Promise<DBUserTag[]> {
+  const sql = getDb();
+  const rows = await sql`
+    select id, name, personal_bests from tags where uid = ${uid} order by name asc
+  `;
+  return rows.map((row) => toTag(row));
+}
 
 export async function addUser(
   name: string,
   email: string,
   uid: string,
 ): Promise<void> {
-  const newUserDocument: Partial<DBUser> = {
-    name,
-    email,
-    uid,
-    addedAt: Date.now(),
-    personalBests: {
-      time: {},
-      words: {},
-      quote: {},
-      zen: {},
-      custom: {},
-    },
-    testActivity: {},
-  };
+  const sql = getDb();
+  const rows = await sql`
+    insert into users (uid, name, email, added_at)
+    values (${uid}, ${name}, ${email}, ${Date.now()})
+    on conflict (uid) do nothing
+    returning uid
+  `;
 
-  const result = await getUsersCollection().updateOne(
-    { uid },
-    { $setOnInsert: newUserDocument },
-    { upsert: true },
-  );
-
-  if (result.upsertedCount === 0) {
+  if (rows.length === 0) {
     throw new MonkeyError(409, "User document already exists", "addUser");
   }
 }
 
 export async function deleteUser(uid: string): Promise<void> {
-  await getUsersCollection().deleteOne({ uid });
+  const sql = getDb();
+  await sql`delete from users where uid = ${uid}`;
 }
 
 export async function resetUser(uid: string): Promise<void> {
-  await getUsersCollection().updateOne(
-    { uid },
-    {
-      $set: {
-        personalBests: {
-          time: {},
-          words: {},
-          quote: {},
-          zen: {},
-          custom: {},
-        },
-        completedTests: 0,
-        startedTests: 0,
-        timeTyping: 0,
-        bananas: 0,
-        profileDetails: {
-          bio: "",
-          keyboard: "",
-          socialProfiles: {},
-        },
-        favoriteQuotes: {},
-        customThemes: [],
-        tags: [],
-        xp: 0,
-        streak: {
-          length: 0,
-          lastResultTimestamp: 0,
-          maxLength: 0,
-        },
-        testActivity: {},
-      },
-      $unset: {
-        discordAvatar: "",
-        discordId: "",
-        lbOptOut: "",
-        inbox: "",
-      },
-    },
-  );
+  const sql = getDb();
+  await sql`
+    update users set
+      personal_bests = ${JSON.stringify(EMPTY_PERSONAL_BESTS)}::jsonb,
+      completed_tests = 0,
+      started_tests = 0,
+      time_typing = 0,
+      bananas = 0,
+      xp = 0,
+      profile_details = ${JSON.stringify({ bio: "", keyboard: "", socialProfiles: {} })}::jsonb,
+      favorite_quotes = '{}'::jsonb,
+      custom_themes = '[]'::jsonb,
+      result_filter_presets = '[]'::jsonb,
+      streak = ${JSON.stringify({ length: 0, lastResultTimestamp: 0, maxLength: 0 })}::jsonb,
+      test_activity = '{}'::jsonb
+    where uid = ${uid}
+  `;
+  await sql`delete from tags where uid = ${uid}`;
 }
 
 export async function updateName(
@@ -147,98 +195,101 @@ export async function updateName(
     throw new MonkeyError(409, "Username already taken", name);
   }
 
-  await getUsersCollection().updateOne(
-    { uid },
-    {
-      $set: { name, lastNameChange: Date.now() },
-      $unset: { needsToChangeName: "" },
-      $push: { nameHistory: previousName },
-    },
-  );
+  const sql = getDb();
+  await sql`
+    update users set
+      name = ${name},
+      last_name_change = ${Date.now()},
+      needs_to_change_name = false,
+      name_history = array_append(name_history, ${previousName})
+    where uid = ${uid}
+  `;
 }
 
 export async function flagForNameChange(uid: string): Promise<void> {
-  await getUsersCollection().updateOne(
-    { uid },
-    { $set: { needsToChangeName: true } },
-  );
+  const sql = getDb();
+  await sql`update users set needs_to_change_name = true where uid = ${uid}`;
 }
 
 export async function clearPb(uid: string): Promise<void> {
-  await getUsersCollection().updateOne(
-    { uid },
-    {
-      $set: {
-        personalBests: {
-          time: {},
-          words: {},
-          quote: {},
-          zen: {},
-          custom: {},
-        },
-      },
-    },
-  );
+  const sql = getDb();
+  await sql`
+    update users set personal_bests = ${JSON.stringify(EMPTY_PERSONAL_BESTS)}::jsonb
+    where uid = ${uid}
+  `;
 }
 
 export async function updateEmail(
   uid: string,
   email: string,
 ): Promise<boolean> {
-  await updateUser({ uid }, { $set: { email } }, { stack: "update email" });
-
+  const sql = getDb();
+  const rows =
+    await sql`update users set email = ${email} where uid = ${uid} returning uid`;
+  if (rows.length === 0) {
+    throw new MonkeyError(404, "User not found", "update email");
+  }
   return true;
 }
 
 export async function getUser(uid: string, stack: string): Promise<DBUser> {
-  const user = await getUsersCollection().findOne({ uid });
-  if (!user) throw new MonkeyError(404, "User not found", stack);
-  return migrateUser(user);
+  const sql = getDb();
+  const rows = await sql`select * from users where uid = ${uid}`;
+  const row = rows[0];
+  if (row === undefined) throw new MonkeyError(404, "User not found", stack);
+
+  return toUser(row, await fetchTags(uid));
 }
 
 /**
- * Get user document only containing requested fields
- * @param uid  user id
- * @param stack stack description used in the error
- * @param fields list of fields
- * @returns partial DBUser only containing requested fields
- * @throws MonkeyError if user does not exist
+ * Get a user only containing the requested fields.
+ * @throws MonkeyError if the user does not exist
  */
 export async function getPartialUser<K extends keyof DBUser>(
   uid: string,
   stack: string,
   fields: K[],
 ): Promise<Pick<DBUser, K>> {
-  const projection = new Map(fields.map((it) => [it, 1]));
-  const partialUser = await getUsersCollection().findOne(
-    { uid },
-    { projection },
-  );
-  if (partialUser === null) throw new MonkeyError(404, "User not found", stack);
+  const sql = getDb();
+  const rows = await sql`select * from users where uid = ${uid}`;
+  const row = rows[0];
+  if (row === undefined) throw new MonkeyError(404, "User not found", stack);
+
+  const tags = fields.includes("tags" as K) ? await fetchTags(uid) : undefined;
+  const user = toUser(row, tags);
+
+  const partial: Partial<DBUser> = {};
+  for (const field of fields) {
+    if (user[field] !== undefined) partial[field] = user[field];
+  }
 
   if (fields.includes("personalBests" as K)) {
-    return migrateUser(partialUser);
+    partial.personalBests ??= { ...EMPTY_PERSONAL_BESTS };
   }
-  return partialUser;
+
+  return partial as Pick<DBUser, K>;
 }
 
 export async function findByName(name: string): Promise<DBUser | undefined> {
-  const found = await getUsersCollection().findOne(
-    { name },
-    { collation: { locale: "en", strength: 1 } },
-  );
+  const sql = getDb();
+  const rows =
+    await sql`select * from users where lower(name) = lower(${name})`;
+  const row = rows[0];
+  if (row === undefined) return undefined;
 
-  return found ?? undefined;
+  return toUser(row, await fetchTags(row["uid"] as string));
 }
 
 export async function isNameAvailable(
   name: string,
   uid: string,
 ): Promise<boolean> {
-  const user = await findByName(name);
-  // if the user found by name is the same as the user we are checking for, then the name is available
-  // this means that the user can update the casing of their name without it being taken
-  return user === undefined || user.uid === uid;
+  const sql = getDb();
+  const rows =
+    await sql`select uid from users where lower(name) = lower(${name})`;
+  const row = rows[0];
+  // the same user keeping their name but changing its casing is allowed
+  return row === undefined || row["uid"] === uid;
 }
 
 export async function getUserByName(
@@ -247,14 +298,14 @@ export async function getUserByName(
 ): Promise<DBUser> {
   const user = await findByName(name);
   if (!user) throw new MonkeyError(404, "User not found", stack);
-  return migrateUser(user);
+  return user;
 }
 
 export async function addResultFilterPreset(
   uid: string,
   resultFilter: ResultFilters,
   maxFiltersPerUser: number,
-): Promise<ObjectId> {
+): Promise<string> {
   if (maxFiltersPerUser === 0) {
     throw new MonkeyError(
       409,
@@ -263,19 +314,25 @@ export async function addResultFilterPreset(
     );
   }
 
-  const _id = new ObjectId();
-  const filter = { uid };
-  filter[`resultFilterPresets.${maxFiltersPerUser - 1}`] = { $exists: false };
+  const sql = getDb();
+  const _id = crypto.randomUUID();
+  const preset = { ...resultFilter, _id };
 
-  await updateUser(
-    filter,
-    { $push: { resultFilterPresets: { ...resultFilter, _id } } },
-    {
-      statusCode: 409,
-      message: "Maximum number of custom filters reached",
-      stack: "add result filter preset",
-    },
-  );
+  const rows = await sql`
+    update users
+    set result_filter_presets = result_filter_presets || ${JSON.stringify([preset])}::jsonb
+    where uid = ${uid}
+      and jsonb_array_length(result_filter_presets) < ${maxFiltersPerUser}
+    returning uid
+  `;
+
+  if (rows.length === 0) {
+    throw new MonkeyError(
+      409,
+      "Maximum number of custom filters reached",
+      "add result filter preset",
+    );
+  }
 
   return _id;
 }
@@ -284,49 +341,47 @@ export async function removeResultFilterPreset(
   uid: string,
   _id: string,
 ): Promise<void> {
-  const presetId = new ObjectId(_id);
+  const sql = getDb();
+  const rows = await sql`
+    update users
+    set result_filter_presets = (
+      select coalesce(jsonb_agg(preset), '[]'::jsonb)
+      from jsonb_array_elements(result_filter_presets) preset
+      where preset->>'_id' <> ${_id}
+    )
+    where uid = ${uid}
+      and result_filter_presets @> ${JSON.stringify([{ _id }])}::jsonb
+    returning uid
+  `;
 
-  await updateUser(
-    { uid, "resultFilterPresets._id": presetId },
-    { $pull: { resultFilterPresets: { _id: presetId } } },
-    {
-      statusCode: 404,
-      message: "Custom filter not found",
-      stack: "remove result filter preset",
-    },
-  );
+  if (rows.length === 0) {
+    throw new MonkeyError(
+      404,
+      "Custom filter not found",
+      "remove result filter preset",
+    );
+  }
 }
 
 export async function addTag(uid: string, name: string): Promise<DBUserTag> {
-  const toPush = {
-    _id: new ObjectId(),
-    name,
-    personalBests: {
-      time: {},
-      words: {},
-      quote: {},
-      zen: {},
-      custom: {},
-    },
-  };
+  const sql = getDb();
+  const rows = await sql`
+    insert into tags (uid, name)
+    select ${uid}, ${name}
+    where (select count(*) from tags where uid = ${uid}) < ${MAX_TAGS}
+    returning id, name, personal_bests
+  `;
 
-  await updateUser(
-    { uid, "tags.14": { $exists: false } },
-    { $push: { tags: toPush } },
-    {
-      statusCode: 400,
-      message: "Maximum number of tags reached",
-      stack: "add tag",
-    },
-  );
+  const row = rows[0];
+  if (row === undefined) {
+    throw new MonkeyError(400, "Maximum number of tags reached", "add tag");
+  }
 
-  return toPush;
+  return toTag(row);
 }
 
 export async function getTags(uid: string): Promise<DBUserTag[]> {
-  const user = await getPartialUser(uid, "get tags", ["tags"]);
-
-  return user.tags ?? [];
+  return await fetchTags(uid);
 }
 
 export async function editTag(
@@ -334,43 +389,43 @@ export async function editTag(
   _id: string,
   name: string,
 ): Promise<void> {
-  const tagId = new ObjectId(_id);
+  if (!isUuid(_id)) throw new MonkeyError(404, "Tag not found", "edit tag");
 
-  await updateUser(
-    { uid, "tags._id": tagId },
-    { $set: { "tags.$.name": name } },
-    { statusCode: 404, message: "Tag not found", stack: "edit tag" },
-  );
+  const sql = getDb();
+  const rows = await sql`
+    update tags set name = ${name} where id = ${_id} and uid = ${uid} returning id
+  `;
+  if (rows.length === 0) {
+    throw new MonkeyError(404, "Tag not found", "edit tag");
+  }
 }
 
 export async function removeTag(uid: string, _id: string): Promise<void> {
-  const tagId = new ObjectId(_id);
+  if (!isUuid(_id)) throw new MonkeyError(404, "Tag not found", "remove tag");
 
-  await updateUser(
-    { uid, "tags._id": tagId },
-    { $pull: { tags: { _id: tagId } } },
-    { statusCode: 404, message: "Tag not found", stack: "remove tag" },
-  );
+  const sql = getDb();
+  const rows = await sql`
+    delete from tags where id = ${_id} and uid = ${uid} returning id
+  `;
+  if (rows.length === 0) {
+    throw new MonkeyError(404, "Tag not found", "remove tag");
+  }
 }
 
 export async function removeTagPb(uid: string, _id: string): Promise<void> {
-  const tagId = new ObjectId(_id);
+  if (!isUuid(_id)) {
+    throw new MonkeyError(404, "Tag not found", "remove tag pb");
+  }
 
-  await updateUser(
-    { uid, "tags._id": tagId },
-    {
-      $set: {
-        "tags.$.personalBests": {
-          time: {},
-          words: {},
-          quote: {},
-          zen: {},
-          custom: {},
-        },
-      },
-    },
-    { statusCode: 404, message: "Tag not found", stack: "remove tag pb" },
-  );
+  const sql = getDb();
+  const rows = await sql`
+    update tags set personal_bests = ${JSON.stringify(EMPTY_PERSONAL_BESTS)}::jsonb
+    where id = ${_id} and uid = ${uid}
+    returning id
+  `;
+  if (rows.length === 0) {
+    throw new MonkeyError(404, "Tag not found", "remove tag pb");
+  }
 }
 
 export async function checkIfPb(
@@ -393,21 +448,16 @@ export async function checkIfPb(
     return false;
   }
 
-  user.personalBests ??= {
-    time: {},
-    custom: {},
-    quote: {},
-    words: {},
-    zen: {},
-  };
+  user.personalBests ??= { ...EMPTY_PERSONAL_BESTS };
   const pb = checkAndUpdatePb(user.personalBests, result);
 
   if (!pb.isPb) return false;
 
-  await getUsersCollection().updateOne(
-    { uid },
-    { $set: { personalBests: pb.personalBests } },
-  );
+  const sql = getDb();
+  await sql`
+    update users set personal_bests = ${JSON.stringify(pb.personalBests)}::jsonb
+    where uid = ${uid}
+  `;
   return true;
 }
 
@@ -434,33 +484,22 @@ export async function checkIfTagPb(
     return [];
   }
 
-  const tagsToCheck: DBUserTag[] = [];
-  user.tags.forEach((userTag) => {
-    for (const resultTag of resultTags ?? []) {
-      if (resultTag === userTag._id.toHexString()) {
-        tagsToCheck.push(userTag);
-      }
-    }
-  });
+  const resultTagIds = new Set(resultTags ?? []);
+  const tagsToCheck = user.tags.filter((tag) => resultTagIds.has(tag._id));
 
+  const sql = getDb();
   const ret: string[] = [];
 
   for (const tag of tagsToCheck) {
-    tag.personalBests ??= {
-      time: {},
-      words: {},
-      quote: {},
-      zen: {},
-      custom: {},
-    };
+    tag.personalBests ??= { ...EMPTY_PERSONAL_BESTS };
 
     const tagpb = checkAndUpdatePb(tag.personalBests, result);
     if (tagpb.isPb) {
-      ret.push(tag._id.toHexString());
-      await getUsersCollection().updateOne(
-        { uid, "tags._id": new ObjectId(tag._id) },
-        { $set: { "tags.$.personalBests": tagpb.personalBests } },
-      );
+      ret.push(tag._id);
+      await sql`
+        update tags set personal_bests = ${JSON.stringify(tagpb.personalBests)}::jsonb
+        where id = ${tag._id} and uid = ${uid}
+      `;
     }
   }
 
@@ -468,35 +507,25 @@ export async function checkIfTagPb(
 }
 
 export async function resetPb(uid: string): Promise<void> {
-  await updateUser(
-    { uid },
-    {
-      $set: {
-        personalBests: {
-          time: {},
-          words: {},
-          quote: {},
-          zen: {},
-          custom: {},
-        },
-      },
-    },
-    { stack: "reset pb" },
-  );
+  const sql = getDb();
+  const rows = await sql`
+    update users set personal_bests = ${JSON.stringify(EMPTY_PERSONAL_BESTS)}::jsonb
+    where uid = ${uid}
+    returning uid
+  `;
+  if (rows.length === 0) {
+    throw new MonkeyError(404, "User not found", "reset pb");
+  }
 }
 
 export async function updateLastHashes(
   uid: string,
   lastHashes: string[],
 ): Promise<void> {
-  await getUsersCollection().updateOne(
-    { uid },
-    {
-      $set: {
-        lastReultHashes: lastHashes, //TODO fix typo
-      },
-    },
-  );
+  const sql = getDb();
+  await sql`
+    update users set last_result_hashes = ${lastHashes} where uid = ${uid}
+  `;
 }
 
 export async function updateTypingStats(
@@ -504,130 +533,126 @@ export async function updateTypingStats(
   restartCount: number,
   timeTyping: number,
 ): Promise<void> {
-  await getUsersCollection().updateOne(
-    { uid },
-    {
-      $inc: {
-        startedTests: restartCount + 1,
-        completedTests: 1,
-        timeTyping,
-      },
-    },
-  );
+  const sql = getDb();
+  await sql`
+    update users set
+      started_tests = started_tests + ${restartCount + 1},
+      completed_tests = completed_tests + 1,
+      time_typing = time_typing + ${timeTyping}
+    where uid = ${uid}
+  `;
 }
 
 export async function incrementBananas(
   uid: string,
   wpm: number,
 ): Promise<void> {
-  //don't throw on missing user
-  await getUsersCollection().updateOne(
-    {
-      uid,
-      "personalBests.time.60": { $exists: true, $not: { $size: 0 } },
-      $expr: {
-        // wpm needs to be >= 75% of the the highest  time 60 PB
-        $gte: [
-          wpm,
-          {
-            $multiply: [
-              //highest wpm with 0.75
-              {
-                $reduce: {
-                  //find highest wpm from time 60 PBs
-                  input: "$personalBests.time.60",
-                  initialValue: 0,
-                  in: {
-                    $cond: [
-                      { $gte: ["$$this.wpm", "$$value"] },
-                      "$$this.wpm",
-                      "$$value",
-                    ],
-                  },
-                },
-              },
-              0.75,
-            ],
-          },
-        ],
-      },
-    },
-    { $inc: { bananas: 1 } },
-  );
+  const { personalBests } = await getPartialUser(uid, "increment bananas", [
+    "personalBests",
+  ]);
+
+  const time60 = personalBests?.time?.["60"] ?? [];
+  if (time60.length === 0) return;
+
+  // only counts when within 75% of the best time 60 pb
+  const best = Math.max(...time60.map((pb) => pb.wpm));
+  if (wpm < best * 0.75) return;
+
+  const sql = getDb();
+  await sql`update users set bananas = bananas + 1 where uid = ${uid}`;
 }
 
 export async function incrementXp(uid: string, xp: number): Promise<void> {
   if (isNaN(xp)) xp = 0;
-  await getUsersCollection().updateOne({ uid }, { $inc: { xp: new Long(xp) } });
+  const sql = getDb();
+  await sql`update users set xp = xp + ${xp} where uid = ${uid}`;
 }
 
 export async function incrementTestActivity(
   user: DBUser,
   timestamp: number,
 ): Promise<void> {
-  if (user.testActivity === undefined) {
-    //migration script did not run yet
-    return;
-  }
-
   const date = new UTCDate(timestamp);
-  const dayOfYear = getDayOfYear(date);
-  const year = date.getFullYear();
+  const dayIndex = getDayOfYear(date) - 1;
+  const year = date.getFullYear().toString();
 
-  if (user.testActivity[year] === undefined) {
-    await getUsersCollection().updateOne(
-      { uid: user.uid },
-      { $set: { [`testActivity.${date.getFullYear()}`]: [] } },
-    );
-  }
-
-  await getUsersCollection().updateOne(
-    { uid: user.uid },
-    { $inc: { [`testActivity.${date.getFullYear()}.${dayOfYear - 1}`]: 1 } },
-  );
+  const sql = getDb();
+  // grow the year's array up to the day, then bump that day's counter
+  await sql`
+    update users set test_activity = jsonb_set(
+      jsonb_set(
+        coalesce(test_activity, '{}'::jsonb),
+        array[${year}],
+        (
+          select coalesce(jsonb_agg(coalesce(value, 'null'::jsonb)), '[]'::jsonb)
+          from (
+            select (coalesce(test_activity->${year}, '[]'::jsonb))->i as value
+            from generate_series(
+              0,
+              greatest(
+                ${dayIndex},
+                jsonb_array_length(coalesce(test_activity->${year}, '[]'::jsonb)) - 1
+              )
+            ) as i
+          ) grown
+        ),
+        true
+      ),
+      array[${year}, ${dayIndex.toString()}],
+      to_jsonb(
+        coalesce(
+          (test_activity->${year}->>${dayIndex.toString()})::int,
+          0
+        ) + 1
+      ),
+      true
+    )
+    where uid = ${user.uid}
+  `;
 }
 
 export async function addTheme(
   uid: string,
   { name, colors }: Omit<CustomTheme, "_id">,
-): Promise<{ _id: ObjectId; name: string }> {
-  const _id = new ObjectId();
+): Promise<{ _id: string; name: string }> {
+  const _id = crypto.randomUUID();
 
-  await updateUser(
-    { uid, "customThemes.19": { $exists: false } },
-    {
-      $push: {
-        customThemes: {
-          _id,
-          name: name,
-          colors: colors,
-        },
-      },
-    },
-    {
-      statusCode: 409,
-      message: "Maximum number of custom themes reached",
-      stack: "add theme",
-    },
-  );
+  const sql = getDb();
+  const rows = await sql`
+    update users
+    set custom_themes = custom_themes || ${JSON.stringify([{ _id, name, colors }])}::jsonb
+    where uid = ${uid}
+      and jsonb_array_length(custom_themes) < ${MAX_CUSTOM_THEMES}
+    returning uid
+  `;
 
-  return {
-    _id,
-    name,
-  };
+  if (rows.length === 0) {
+    throw new MonkeyError(
+      409,
+      "Maximum number of custom themes reached",
+      "add theme",
+    );
+  }
+
+  return { _id, name };
 }
 
 export async function removeTheme(uid: string, id: string): Promise<void> {
-  const themeId = new ObjectId(id);
-  await updateUser(
-    { uid, "customThemes._id": themeId },
-    { $pull: { customThemes: { _id: themeId } } },
-    {
-      statusCode: 404,
-      message: "Custom theme not found",
-      stack: "remove theme",
-    },
-  );
+  const sql = getDb();
+  const rows = await sql`
+    update users
+    set custom_themes = (
+      select coalesce(jsonb_agg(theme), '[]'::jsonb)
+      from jsonb_array_elements(custom_themes) theme
+      where theme->>'_id' <> ${id}
+    )
+    where uid = ${uid} and custom_themes @> ${JSON.stringify([{ _id: id }])}::jsonb
+    returning uid
+  `;
+
+  if (rows.length === 0) {
+    throw new MonkeyError(404, "Custom theme not found", "remove theme");
+  }
 }
 
 export async function editTheme(
@@ -635,21 +660,26 @@ export async function editTheme(
   id: string,
   { name, colors }: Omit<CustomTheme, "_id">,
 ): Promise<void> {
-  const themeId = new ObjectId(id);
+  const sql = getDb();
+  const rows = await sql`
+    update users
+    set custom_themes = (
+      select coalesce(jsonb_agg(
+        case when theme->>'_id' = ${id}
+          then theme || ${JSON.stringify({ name, colors })}::jsonb
+          else theme
+        end
+      ), '[]'::jsonb)
+      from jsonb_array_elements(custom_themes) theme
+    )
+    where uid = ${uid} and custom_themes @> ${JSON.stringify([{ _id: id }])}::jsonb
+    returning uid
+  `;
 
-  await updateUser(
-    { uid, "customThemes._id": themeId },
-    {
-      $set: {
-        "customThemes.$.name": name,
-        "customThemes.$.colors": colors,
-      },
-    },
-    { statusCode: 404, message: "Custom theme not found", stack: "edit theme" },
-  );
+  if (rows.length === 0) {
+    throw new MonkeyError(404, "Custom theme not found", "edit theme");
+  }
 }
-
-export type DBCustomTheme = WithObjectId<CustomTheme>;
 
 export async function getThemes(uid: string): Promise<DBCustomTheme[]> {
   const user = await getPartialUser(uid, "get themes", ["customThemes"]);
@@ -676,13 +706,11 @@ export async function getPersonalBests(
 export async function getStats(
   uid: string,
 ): Promise<Pick<DBUser, "startedTests" | "completedTests" | "timeTyping">> {
-  const user = await getPartialUser(uid, "get stats", [
+  return await getPartialUser(uid, "get stats", [
     "startedTests",
     "completedTests",
     "timeTyping",
   ]);
-
-  return user;
 }
 
 export async function getFavoriteQuotes(
@@ -701,35 +729,34 @@ export async function addFavoriteQuote(
   quoteId: string,
   maxQuotes: number,
 ): Promise<void> {
-  await updateUser(
-    {
-      uid,
-      $expr: {
-        //total amount of quotes need to be lower than maxQuotes
-        $lt: [
-          {
-            $reduce: {
-              input: { $objectToArray: "$favoriteQuotes" },
-              initialValue: 0,
-              in: { $add: ["$$value", { $size: "$$this.v" }] },
-            },
-          },
-          maxQuotes,
-        ],
-      },
-    },
-    {
-      $addToSet: {
-        //ensure quoteId is unique in the array
-        [`favoriteQuotes.${language}`]: quoteId,
-      },
-    },
-    {
-      statusCode: 409,
-      message: "Maximum number of favorite quotes reached",
-      stack: "add favorite quote",
-    },
+  const favorites = await getFavoriteQuotes(uid);
+  const total = Object.values(favorites).reduce(
+    (sum, ids) => sum + (ids?.length ?? 0),
+    0,
   );
+
+  if (total >= maxQuotes) {
+    throw new MonkeyError(
+      409,
+      "Maximum number of favorite quotes reached",
+      "add favorite quote",
+    );
+  }
+
+  const forLanguage = (favorites[language] ?? []) as string[];
+  if (forLanguage.includes(quoteId)) return;
+
+  const sql = getDb();
+  await sql`
+    update users
+    set favorite_quotes = jsonb_set(
+      favorite_quotes,
+      array[${language}],
+      ${JSON.stringify([...forLanguage, quoteId])}::jsonb,
+      true
+    )
+    where uid = ${uid}
+  `;
 }
 
 export async function removeFavoriteQuote(
@@ -737,11 +764,21 @@ export async function removeFavoriteQuote(
   language: string,
   quoteId: string,
 ): Promise<void> {
-  await updateUser(
-    { uid },
-    { $pull: { [`favoriteQuotes.${language}`]: quoteId } },
-    { stack: "remove favorite quote" },
-  );
+  const favorites = await getFavoriteQuotes(uid);
+  const forLanguage = favorites[language] as string[] | undefined;
+  if (forLanguage === undefined) return;
+
+  const sql = getDb();
+  await sql`
+    update users
+    set favorite_quotes = jsonb_set(
+      favorite_quotes,
+      array[${language}],
+      ${JSON.stringify(forLanguage.filter((id) => id !== quoteId))}::jsonb,
+      true
+    )
+    where uid = ${uid}
+  `;
 }
 
 export async function recordAutoBanEvent(
@@ -759,7 +796,6 @@ export async function recordAutoBanEvent(
   if (user.banned) return ret;
 
   const autoBanTimestamps = user.autoBanTimestamps ?? [];
-
   const now = Date.now();
 
   //only keep events within the last maxHours
@@ -770,16 +806,16 @@ export async function recordAutoBanEvent(
   //push new event
   recentAutoBanTimestamps.push(now);
 
-  //update user, ban if needed
-  const updateObj: Partial<DBUser> = {
-    autoBanTimestamps: recentAutoBanTimestamps,
-  };
-  if (recentAutoBanTimestamps.length > maxCount) {
-    updateObj.banned = true;
-    ret = true;
-  }
+  const banned = recentAutoBanTimestamps.length > maxCount;
+  if (banned) ret = true;
 
-  await getUsersCollection().updateOne({ uid }, { $set: updateObj });
+  const sql = getDb();
+  await sql`
+    update users set
+      auto_ban_timestamps = ${recentAutoBanTimestamps},
+      banned = ${banned ? true : null} is not null or banned
+    where uid = ${uid}
+  `;
 
   return ret;
 }
@@ -789,31 +825,21 @@ export async function updateProfile(
   profileDetailUpdates: Partial<UserProfileDetails>,
   inventory?: UserInventory,
 ): Promise<void> {
-  let profileUpdates = flattenObjectDeep(
-    Object.fromEntries(
-      Object.entries(profileDetailUpdates).filter(
-        ([_, value]) =>
-          value !== undefined &&
-          !(isPlainObject(value) && Object.keys(value).length === 0),
-      ),
+  const updates = Object.fromEntries(
+    Object.entries(profileDetailUpdates).filter(
+      ([, value]) =>
+        value !== undefined &&
+        !(isPlainObject(value) && Object.keys(value).length === 0),
     ),
-    "profileDetails",
   );
 
-  const updates = {
-    $set: {
-      ...profileUpdates,
-      inventory,
-    },
-  };
-  if (inventory === undefined) delete updates.$set.inventory;
-
-  await getUsersCollection().updateOne(
-    {
-      uid,
-    },
-    updates,
-  );
+  const sql = getDb();
+  await sql`
+    update users set
+      profile_details = coalesce(profile_details, '{}'::jsonb) || ${JSON.stringify(updates)}::jsonb,
+      inventory = coalesce(${inventory === undefined ? null : JSON.stringify(inventory)}::jsonb, inventory)
+    where uid = ${uid}
+  `;
 }
 
 export async function updateStreak(
@@ -841,11 +867,13 @@ export async function updateStreak(
   streak.lastResultTimestamp = timestamp;
 
   if (user.streak?.hourOffset === 0) {
-    // todo this needs to be removed after a while
     delete streak.hourOffset;
   }
 
-  await getUsersCollection().updateOne({ uid }, { $set: { streak } });
+  const sql = getDb();
+  await sql`
+    update users set streak = ${JSON.stringify(streak)}::jsonb where uid = ${uid}
+  `;
 
   return streak.length;
 }
@@ -854,34 +882,25 @@ export async function setStreakHourOffset(
   uid: string,
   hourOffset: number,
 ): Promise<void> {
-  await getUsersCollection().updateOne(
-    { uid },
-    {
-      $set: {
-        "streak.hourOffset": hourOffset,
-        "streak.lastResultTimestamp": Date.now(),
-      },
-    },
-  );
+  const sql = getDb();
+  await sql`
+    update users set streak = coalesce(streak, '{}'::jsonb) || ${JSON.stringify(
+      { hourOffset, lastResultTimestamp: Date.now() },
+    )}::jsonb
+    where uid = ${uid}
+  `;
 }
 
 export async function setBanned(uid: string, banned: boolean): Promise<void> {
-  if (banned) {
-    await getUsersCollection().updateOne({ uid }, { $set: { banned: true } });
-  } else {
-    await getUsersCollection().updateOne({ uid }, { $unset: { banned: "" } });
-  }
+  const sql = getDb();
+  await sql`update users set banned = ${banned} where uid = ${uid}`;
 }
 
 export async function clearStreakHourOffset(uid: string): Promise<void> {
-  await getUsersCollection().updateOne(
-    { uid },
-    {
-      $unset: {
-        "streak.hourOffset": "",
-      },
-    },
-  );
+  const sql = getDb();
+  await sql`
+    update users set streak = streak - 'hourOffset' where uid = ${uid}
+  `;
 }
 
 export async function checkIfUserIsPremium(
@@ -910,7 +929,7 @@ export async function logIpAddress(
 ): Promise<void> {
   const user =
     userInfoOverride ?? (await getPartialUser(uid, "logIpAddress", ["ips"]));
-  const currentIps = user.ips ?? [];
+  const currentIps = [...(user.ips ?? [])];
   const ipIndex = currentIps.indexOf(ip);
   if (ipIndex !== -1) {
     currentIps.splice(ipIndex, 1);
@@ -919,40 +938,7 @@ export async function logIpAddress(
   if (currentIps.length > 10) {
     currentIps.pop();
   }
-  await getUsersCollection().updateOne({ uid }, { $set: { ips: currentIps } });
-}
 
-/**
- * Update user document. Requires the user to exist
- * @param filter user filter
- * @param update update document
- * @param error stack description used in the error or statusCode and message of the error
- * @throws MonkeyError if user does not exist
- */
-async function updateUser(
-  filter: Filter<DBUser>,
-  update: UpdateFilter<DBUser>,
-  error: { stack: string; statusCode?: number; message?: string },
-): Promise<void> {
-  const result = await getUsersCollection().updateOne(filter, update);
-
-  if (result.matchedCount !== 1) {
-    throw new MonkeyError(
-      error.statusCode ?? 404,
-      error.message ?? "User not found",
-      error.stack,
-    );
-  }
-}
-
-function migrateUser<T extends { personalBests: PersonalBests }>(user: T): T {
-  user.personalBests ??= {
-    time: {},
-    words: {},
-    quote: {},
-    zen: {},
-    custom: {},
-  };
-
-  return user;
+  const sql = getDb();
+  await sql`update users set ips = ${currentIps} where uid = ${uid}`;
 }

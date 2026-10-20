@@ -1,7 +1,6 @@
-import * as db from "./db";
-import { ObjectId } from "mongodb";
+import { getDb } from "./sql";
 import Logger from "../utils/logger";
-import { identity, isPlainObject, omit } from "../utils/misc";
+import { identity, isPlainObject } from "../utils/misc";
 import { BASE_CONFIGURATION } from "../constants/base-configuration";
 import {
   Configuration,
@@ -75,26 +74,24 @@ export async function getCachedConfiguration(
 export async function getLiveConfiguration(): Promise<Configuration> {
   lastFetchTime = Date.now();
 
-  const configurationCollection = db.collection("configuration");
-
   try {
-    const liveConfiguration = await configurationCollection.findOne();
+    const sql = getDb();
+    const rows = await sql`select value from configuration where id = true`;
+    const liveConfiguration = rows[0]?.["value"] as Configuration | undefined;
 
-    if (liveConfiguration) {
+    if (liveConfiguration !== undefined) {
       const baseConfiguration = structuredClone(BASE_CONFIGURATION);
-
-      const liveConfigurationWithoutId = omit(liveConfiguration, [
-        "_id",
-      ]) as Configuration;
-      mergeConfigurations(baseConfiguration, liveConfigurationWithoutId);
+      mergeConfigurations(baseConfiguration, liveConfiguration);
 
       await pushConfiguration(baseConfiguration);
       configuration = baseConfiguration;
     } else {
-      await configurationCollection.insertOne({
-        ...BASE_CONFIGURATION,
-        _id: new ObjectId(),
-      }); // Seed the base configuration.
+      // seed the base configuration
+      await sql`
+        insert into configuration (id, value)
+        values (true, ${JSON.stringify(BASE_CONFIGURATION)}::jsonb)
+        on conflict (id) do nothing
+      `;
     }
   } catch (error) {
     const errorMessage = getErrorMessage(error) ?? "Unknown error";
@@ -112,7 +109,12 @@ async function pushConfiguration(
   }
 
   try {
-    await db.collection("configuration").replaceOne({}, configurationToPush);
+    const sql = getDb();
+    await sql`
+      insert into configuration (id, value)
+      values (true, ${JSON.stringify(configurationToPush)}::jsonb)
+      on conflict (id) do update set value = excluded.value
+    `;
     serverConfigurationUpdated = true;
   } catch (error) {
     const errorMessage = getErrorMessage(error) ?? "Unknown error";
@@ -127,9 +129,12 @@ export async function patchConfiguration(
     const currentConfiguration = structuredClone(configuration);
     mergeConfigurations(currentConfiguration, configurationUpdates);
 
-    await db
-      .collection("configuration")
-      .updateOne({}, { $set: currentConfiguration }, { upsert: true });
+    const sql = getDb();
+    await sql`
+      insert into configuration (id, value)
+      values (true, ${JSON.stringify(currentConfiguration)}::jsonb)
+      on conflict (id) do update set value = excluded.value
+    `;
 
     await getLiveConfiguration();
   } catch (error) {

@@ -1,5 +1,4 @@
 import "dotenv/config";
-import * as db from "./init/db";
 import {
   getLiveConfiguration,
   updateFromConfigurationFile,
@@ -16,10 +15,6 @@ async function bootServer(port: number): Promise<Server> {
   try {
     Logger.info(`Starting server version ${version}`);
     Logger.info(`Starting server in ${process.env["MODE"]} mode`);
-    Logger.info(`Connecting to database ${process.env["DB_NAME"]}...`);
-    await db.connect();
-    Logger.success("Connected to database");
-
     Logger.info("Initializing Firebase app instance...");
     initFirebaseAdmin();
 

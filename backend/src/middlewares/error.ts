@@ -1,4 +1,3 @@
-import * as db from "../init/db";
 import { v4 as uuidv4 } from "uuid";
 import Logger from "../utils/logger";
 import MonkeyError, { getErrorMessage } from "../utils/error";
@@ -13,18 +12,6 @@ import {
 import { isDevEnvironment } from "../utils/misc";
 import { version } from "../version";
 import { ExpressRequestWithContext } from "../api/types";
-
-type DBError = {
-  _id: string; //we are using uuid here, not objectIds
-  timestamp: number;
-  status: number;
-  uid: string;
-  message: string;
-  stack?: string;
-  endpoint: string;
-  method: string;
-  url: string;
-};
 
 type ErrorData = {
   errorId?: string;
@@ -72,23 +59,10 @@ async function errorHandlingMiddleware(
         errorId: string;
       };
 
-      try {
-        await db.collection<DBError>("errors").insertOne({
-          _id: errorId,
-          timestamp: Date.now(),
-          status: status,
-          uid,
-          message: error.message,
-          stack: error.stack,
-          endpoint: req.originalUrl,
-          method: req.method,
-          url: req.url,
-        });
-      } catch (e) {
-        Logger.error("Logging to db failed.");
-        Logger.error(getErrorMessage(e) ?? "Unknown error");
-        console.error(e);
-      }
+      Logger.error(
+        `Error ${errorId} for ${uid} on ${req.method} ${req.originalUrl}: ${error.message}`,
+      );
+      Logger.error(error.stack ?? "no stack");
     } else {
       Logger.error(`Error: ${error.message} Stack: ${error.stack}`);
     }

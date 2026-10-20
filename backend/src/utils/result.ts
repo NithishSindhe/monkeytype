@@ -1,20 +1,7 @@
-import {
-  ChartData,
-  CompletedEvent,
-  OldChartData,
-  Result,
-} from "@monkeytype/schemas/results";
+import { CompletedEvent, Result } from "@monkeytype/schemas/results";
 import { Mode } from "@monkeytype/schemas/shared";
-import { ObjectId } from "mongodb";
-import { WithObjectId } from "./misc";
-import { FunboxName } from "@monkeytype/schemas/configs";
 
-export type DBResult = WithObjectId<Result<Mode>> & {
-  //legacy values
-  correctChars?: number;
-  incorrectChars?: number;
-  chartData: ChartData | OldChartData | "toolong";
-};
+export type DBResult = Result<Mode>;
 
 export function buildDbResult(
   completedEvent: CompletedEvent,
@@ -23,7 +10,7 @@ export function buildDbResult(
 ): DBResult {
   const ce = completedEvent;
   const res: DBResult = {
-    _id: new ObjectId(),
+    _id: "",
     uid: ce.uid,
     wpm: ce.wpm,
     rawWpm: ce.rawWpm,
@@ -71,65 +58,4 @@ export function buildDbResult(
   if (res.isPb === false) delete res.isPb;
 
   return res;
-}
-
-/**
- * Convert legacy values
- * @param result
- * @returns
- */
-export function replaceLegacyValues(result: DBResult): DBResult {
-  //convert legacy values
-  if (
-    result.correctChars !== undefined &&
-    result.incorrectChars !== undefined
-  ) {
-    //super edge case but just in case
-    if (result.charStats !== undefined) {
-      result.charStats = [
-        result.charStats[0],
-        result.charStats[1],
-        result.charStats[2],
-        result.charStats[3],
-      ];
-      delete result.correctChars;
-      delete result.incorrectChars;
-    } else {
-      result.charStats = [result.correctChars, result.incorrectChars, 0, 0];
-      delete result.correctChars;
-      delete result.incorrectChars;
-    }
-  }
-
-  if (typeof result.funbox === "string") {
-    if (result.funbox === "none") {
-      result.funbox = [];
-    } else {
-      result.funbox = (result.funbox as string).split("#") as FunboxName[];
-    }
-  }
-
-  if (
-    result.chartData !== undefined &&
-    result.chartData !== "toolong" &&
-    "raw" in result.chartData
-  ) {
-    const temp = result.chartData;
-    result.chartData = {
-      wpm: temp.wpm,
-      burst: temp.raw,
-      err: temp.err,
-    };
-  }
-
-  if (typeof result.mode2 === "number") {
-    result.mode2 = (result.mode2 as number).toString();
-  }
-
-  //legacy value for english_1k
-  if ((result.language as string) === "english_expanded") {
-    result.language = "english_1k";
-  }
-
-  return result;
 }
