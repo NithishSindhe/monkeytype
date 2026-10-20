@@ -14,7 +14,8 @@
     "test": "vitest run --project=unit",
     "integration-test": "vitest run --project=integration",
     "test-coverage": "vitest run --coverage",
-    "dev": "concurrently -p none \"tsx watch --clear-screen=false --inspect ./src/server.ts\" \"tsc --preserveWatchOutput --noEmit --watch\"  \"esw src/ -w --ext .ts --cache --color\""
+    "dev": "concurrently -p none \"tsx watch --clear-screen=false --inspect ./src/server.ts\" \"tsc --preserveWatchOutput --noEmit --watch\"  \"esw src/ -w --ext .ts --cache --color\"",
+    "migrate": "node scripts/migrate.cjs"
   },
   "dependencies": {
     "@date-fns/utc": "1.2.0",
@@ -23,6 +24,7 @@
     "@monkeytype/funbox": "workspace:*",
     "@monkeytype/schemas": "workspace:*",
     "@monkeytype/util": "workspace:*",
+    "@neondatabase/serverless": "1.1.0",
     "@ts-rest/core": "3.52.1",
     "@ts-rest/express": "3.52.1",
     "chalk": "4.1.2",
@@ -55,6 +57,7 @@
     "@types/supertest": "6.0.3",
     "@types/ua-parser-js": "0.7.36",
     "@types/uuid": "10.0.0",
+    "@types/ws": "8.18.2",
     "@vitest/coverage-v8": "4.1.5",
     "concurrently": "8.2.2",
     "oxlint": "1.88.0",
@@ -65,6 +68,7 @@
     "tsx": "4.21.0",
     "typescript": "7.0.2",
     "vitest": "4.1.0",
+    "ws": "8.18.0",
     "yaml": "2.8.2"
   },
   "engines": {
