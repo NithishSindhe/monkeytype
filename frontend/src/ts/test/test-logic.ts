@@ -116,7 +116,6 @@ import {
 } from "../states/result";
 import { blurInputElement, setInputElementValue } from "../input/input-element";
 import { debounce } from "throttle-debounce";
-import { qs } from "../utils/dom";
 import { setAccountButtonSpinner } from "../states/header";
 import { Config } from "../config/store";
 import { setQuoteLengthAll, toggleFunbox, setConfig } from "../config/setters";
@@ -1196,8 +1195,7 @@ async function showResult(
   setResultLoading(false);
   setShowResult(true);
 
-  const resultPrefocusTarget = qs("#resultButtonsPrefocusTarget");
-  resultPrefocusTarget?.focus({ preventScroll: true });
+  // the result focuses itself once rendered, see ResultButtons
 
   setResultCalculating(false);
   TestUI.clearWords();

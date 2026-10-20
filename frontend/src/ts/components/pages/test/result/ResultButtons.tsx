@@ -1,7 +1,8 @@
 import { createKeyHold } from "@tanstack/solid-hotkeys";
-import { JSXElement, Show } from "solid-js";
+import { JSXElement, onMount, Show } from "solid-js";
 
 import { getConfig } from "../../../../config/store";
+import { useRefWithUtils } from "../../../../hooks/useRefWithUtils";
 import { getIsScreenshotting } from "../../../../states/core";
 import { showModal } from "../../../../states/modals";
 import { showNoticeNotification } from "../../../../states/notifications";
@@ -19,11 +20,17 @@ import { toggleReplayDisplay } from "./replay";
 
 export function ResultButtons(props: { glarses: boolean }): JSXElement {
   const isShiftHeld = createKeyHold("Shift");
+  const [prefocusRef, prefocusEl] = useRefWithUtils<HTMLDivElement>();
+
+  // parks focus right before the buttons so tab reaches "next test" first,
+  // instead of whatever comes earlier in the result (eg. the sign in link)
+  onMount(() => prefocusEl()?.native.focus({ preventScroll: true }));
 
   return (
     <>
       <div
         id="resultButtonsPrefocusTarget"
+        ref={prefocusRef}
         class="focus:outline-none focus-visible:outline-none"
         tabIndex="-1"
       ></div>
