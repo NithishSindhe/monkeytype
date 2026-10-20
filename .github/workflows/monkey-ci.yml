@@ -3,7 +3,7 @@ name: Monkey CI
 env:
   PNPM_VERSION: "11.21.0"
   NODE_VERSION: "24.11.0"
-  RECAPTCHA_SITE_KEY: "6Lc-V8McAAAAAJ7s6LGNe7MBZnRiwbsbiWts87aj"
+  CLERK_PUBLISHABLE_KEY: "pk_test_ci-placeholder"
 
 permissions:
   contents: read
@@ -253,10 +253,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Create stub firebase config
-        working-directory: ./frontend/src/ts/constants
-        run: mv ./firebase-config-example.ts ./firebase-config.ts && cp ./firebase-config.ts ./firebase-config-live.ts
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
