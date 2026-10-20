@@ -23,12 +23,6 @@ export default s.router(usersContract, {
   updateName: {
     handler: async (r) => callController(UserController.updateName)(r),
   },
-  updateEmail: {
-    handler: async (r) => callController(UserController.updateEmail)(r),
-  },
-  updatePassword: {
-    handler: async (r) => callController(UserController.updatePassword)(r),
-  },
   getPersonalBests: {
     handler: async (r) => callController(UserController.getPersonalBests)(r),
   },

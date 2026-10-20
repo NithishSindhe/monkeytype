@@ -22,7 +22,6 @@ import {
   UserSchema,
   UserStreakSchema,
   UserTagSchema,
-  UserEmailSchema,
   UserNameSchema,
 } from "@monkeytype/schemas/users";
 import {
@@ -38,10 +37,7 @@ export const GetUserResponseSchema = responseWithData(UserSchema);
 export type GetUserResponse = z.infer<typeof GetUserResponseSchema>;
 
 export const CreateUserRequestSchema = z.object({
-  email: UserEmailSchema.optional(),
   name: UserNameSchema,
-  uid: z.string().optional(), //defined by firebase, no validation should be applied
-  captcha: z.string(), //defined by google recaptcha, no validation should be applied
 });
 export type CreateUserRequest = z.infer<typeof CreateUserRequestSchema>;
 
@@ -63,17 +59,6 @@ export const UpdateUserNameRequestSchema = z.object({
   name: UserNameSchema,
 });
 export type UpdateUserNameRequest = z.infer<typeof UpdateUserNameRequestSchema>;
-
-export const UpdateEmailRequestSchema = z.object({
-  newEmail: UserEmailSchema,
-  previousEmail: UserEmailSchema,
-});
-export type UpdateEmailRequest = z.infer<typeof UpdateEmailRequestSchema>;
-
-export const UpdatePasswordRequestSchema = z.object({
-  newPassword: z.string().min(6),
-});
-export type UpdatePasswordRequest = z.infer<typeof UpdatePasswordRequestSchema>;
 
 export const GetPersonalBestsQuerySchema = z.object({
   mode: ModeSchema,
@@ -340,34 +325,6 @@ export const usersContract = c.router(
       metadata: meta({
         authenticationOptions: { requireFreshToken: true },
         rateLimit: "userUpdateName",
-      }),
-    },
-    updateEmail: {
-      summary: "update email",
-      description: "Updates a user's email",
-      method: "PATCH",
-      path: "/email",
-      body: UpdateEmailRequestSchema.strict(),
-      responses: {
-        200: MonkeyResponseSchema,
-      },
-      metadata: meta({
-        authenticationOptions: { requireFreshToken: true },
-        rateLimit: "userUpdateEmail",
-      }),
-    },
-    updatePassword: {
-      summary: "update password",
-      description: "Updates a user's password",
-      method: "PATCH",
-      path: "/password",
-      body: UpdatePasswordRequestSchema.strict(),
-      responses: {
-        200: MonkeyResponseSchema,
-      },
-      metadata: meta({
-        authenticationOptions: { requireFreshToken: true },
-        rateLimit: "userUpdateEmail",
       }),
     },
     getPersonalBests: {

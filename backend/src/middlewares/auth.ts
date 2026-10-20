@@ -1,5 +1,5 @@
 import MonkeyError from "../utils/error";
-import { verifyIdToken } from "../utils/auth";
+import { verifySessionToken } from "../utils/auth";
 import { isDevEnvironment } from "../utils/misc";
 import { NextFunction, Response } from "express";
 import {
@@ -160,16 +160,10 @@ async function authenticateWithBearerToken(
   options: RequestAuthenticationOptions,
 ): Promise<DecodedToken> {
   try {
-    const decodedToken = await verifyIdToken(
-      token,
-      (options.requireFreshToken ?? false) || (options.noCache ?? false),
-    );
+    const decodedToken = await verifySessionToken(token);
 
     if (options.requireFreshToken) {
-      const now = Date.now();
-      const tokenIssuedAt = new Date(decodedToken.iat * 1000).getTime();
-
-      if (now - tokenIssuedAt > 60 * 1000) {
+      if (Date.now() - decodedToken.issuedAt > 60 * 1000) {
         throw new MonkeyError(
           401,
           "Unauthorized",
@@ -181,50 +175,25 @@ async function authenticateWithBearerToken(
     return {
       type: "Bearer",
       uid: decodedToken.uid,
-      email: decodedToken.email ?? "",
+      email: decodedToken.email,
     };
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes("An internal error has occurred")
-    ) {
-      throw new MonkeyError(
-        503,
-        "Firebase returned an internal error when trying to verify the token.",
-        "authenticateWithBearerToken",
-      );
-    }
+    if (error instanceof MonkeyError) throw error;
 
-    // oxlint-disable-next-line no-unsafe-member-access
-    const errorCode = error?.errorInfo?.code as string | undefined;
-
-    if (errorCode?.includes("auth/id-token-expired")) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("expired")) {
       throw new MonkeyError(
         401,
         "Token expired - please login again",
         "authenticateWithBearerToken",
       );
-    } else if (errorCode?.includes("auth/id-token-revoked")) {
-      throw new MonkeyError(
-        401,
-        "Token revoked - please login again",
-        "authenticateWithBearerToken",
-      );
-    } else if (errorCode?.includes("auth/user-not-found")) {
-      throw new MonkeyError(
-        404,
-        "User not found",
-        "authenticateWithBearerToken",
-      );
-    } else if (errorCode?.includes("auth/argument-error")) {
-      throw new MonkeyError(
-        400,
-        "Incorrect Bearer token format",
-        "authenticateWithBearerToken",
-      );
-    } else {
-      throw error;
     }
+
+    throw new MonkeyError(
+      401,
+      "Unauthorized",
+      `Failed to verify the token: ${message}`,
+    );
   }
 }
 

@@ -8,16 +8,12 @@ import { Server } from "http";
 import { version } from "./version";
 import { recordServerVersion } from "./utils/prometheus";
 import Logger from "./utils/logger";
-import { init as initFirebaseAdmin } from "./init/firebase-admin";
 import { getErrorMessage } from "./utils/error";
 
 async function bootServer(port: number): Promise<Server> {
   try {
     Logger.info(`Starting server version ${version}`);
     Logger.info(`Starting server in ${process.env["MODE"]} mode`);
-    Logger.info("Initializing Firebase app instance...");
-    initFirebaseAdmin();
-
     Logger.info("Fetching live configuration...");
     await getLiveConfiguration();
     Logger.success("Live configuration fetched");

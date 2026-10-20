@@ -1,26 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { isDevEnvironment } from "./misc";
 import { MonkeyServerErrorType } from "@monkeytype/contracts/util/api";
-import { FirebaseError } from "firebase-admin";
-
-type FirebaseErrorParent = {
-  code: string;
-  errorInfo: FirebaseError;
-};
-
-export function isFirebaseError(err: unknown): err is FirebaseErrorParent {
-  return (
-    err !== null &&
-    typeof err === "object" &&
-    "code" in err &&
-    "errorInfo" in err &&
-    "codePrefix" in err &&
-    typeof err.errorInfo === "object" &&
-    err.errorInfo !== null &&
-    "code" in err.errorInfo &&
-    "message" in err.errorInfo
-  );
-}
 
 export function getErrorMessage(error: unknown): string | undefined {
   let message = "";
