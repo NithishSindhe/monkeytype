@@ -84,7 +84,7 @@ import { configEvent } from "../events/config";
 import { timerEvent } from "../events/timer";
 import objectHash from "object-hash";
 import * as AnalyticsController from "../controllers/analytics-controller";
-import { getAuthenticatedUser } from "../firebase";
+import { getAuthenticatedUser } from "../auth-client";
 import { highlight } from "../events/keymap";
 import * as LazyModeState from "../legacy-states/remember-lazy-mode";
 import { Mode } from "@monkeytype/schemas/shared";

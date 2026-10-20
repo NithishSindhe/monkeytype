@@ -7,7 +7,6 @@ export type ModalId =
   | "Commandline"
   | "DevOptions"
   | "EventLogViewer"
-  | "RegisterCaptcha"
   | "Alerts"
   | "SimpleModal"
   | "CustomText"
@@ -29,7 +28,7 @@ export type ModalId =
   | "EditProfile"
   | "LastSignedOutResult"
   | "StreakHourOffset"
-  | "GoogleSignup"
+  | "PickUsername"
   | "ForgotPassword"
   | "EditResultTags"
   | "TheRest";

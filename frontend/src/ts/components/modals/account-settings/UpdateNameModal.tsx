@@ -2,11 +2,6 @@ import { UserNameSchema } from "@monkeytype/schemas/users";
 import { z } from "zod";
 
 import Ape from "../../../ape";
-import {
-  getPasswordSchema,
-  isUsingPasswordAuthentication,
-  reauthenticate,
-} from "../../../auth";
 import { setSnapshot, getSnapshot } from "../../../db";
 import { isAuthenticated } from "../../../states/core";
 import { showSimpleModal } from "../../../states/simple-modal";
@@ -18,22 +13,14 @@ export function showUpdateNameModal(): void {
 
   showSimpleModal({
     title: "Update name",
-    buttonText: isUsingPasswordAuthentication()
-      ? "update"
-      : "reauthenticate to update",
+    buttonText: "update",
     text: snapshot.needsToChangeName
       ? "You need to change your account name. This might be because you have a duplicate name, no account name or your name is not allowed (contains whitespace or invalid characters). Sorry for the inconvenience."
       : undefined,
     schema: z.object({
-      password: getPasswordSchema(),
       newName: UserNameSchema,
     }),
     inputs: {
-      password: {
-        placeholder: "password",
-        type: "password",
-        hidden: !isUsingPasswordAuthentication(),
-      },
       newName: {
         placeholder: "new name",
         type: "text",
@@ -48,15 +35,7 @@ export function showUpdateNameModal(): void {
       },
     },
 
-    execFn: async ({ password, newName }) => {
-      const reauth = await reauthenticate({ password });
-      if (reauth.status !== "success") {
-        return {
-          status: reauth.status,
-          message: reauth.message,
-        };
-      }
-
+    execFn: async ({ newName }) => {
       const response = await Ape.users.updateName({
         body: { name: newName },
       });

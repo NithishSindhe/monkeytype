@@ -4,11 +4,11 @@ import objectHash from "object-hash";
 import { createMemo, JSX } from "solid-js";
 
 import Ape from "../../ape";
+import { getAuthenticatedUser } from "../../auth-client";
 import { getConfig } from "../../config/store";
 import { SnapshotResult } from "../../constants/default-snapshot";
 import { saveLocalResult, SaveLocalResultData } from "../../db";
 import { authEvent } from "../../events/auth";
-import { getAuthenticatedUser } from "../../firebase";
 import { hideModal, showModal } from "../../states/modals";
 import {
   showErrorNotification,

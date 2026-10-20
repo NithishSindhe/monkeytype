@@ -99,7 +99,7 @@ export function DevOptionsModal(): JSXElement {
           true,
         )
           .then((result) => {
-            if (!result.success) {
+            if (result.status === "error") {
               showErrorNotification(result.message);
             }
           })

@@ -9,15 +9,14 @@ import { CustomTextModal } from "./CustomTextModal";
 import { CustomWordAmountModal } from "./CustomWordAmountModal";
 import { EditResultTagsModal } from "./EditResultTagsModal";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
-import { GoogleSignupModal } from "./GoogleSignUpModal";
 import { LastSignedOutResultModal } from "./LastSignedOutResultModal";
 import { MobileTestConfigModal } from "./MobileTestConfigModal";
 import { PbTablesModal } from "./PbTablesModal";
+import { PickUsernameModal } from "./PickUsernameModal";
 import { PractiseWordsModal } from "./PractiseWordsModal";
 import { AddPresetModal } from "./preset/AddPresetModal";
 import { EditPresetModal } from "./preset/EditPresetModal";
 import { QuoteSearchModal } from "./QuoteSearchModal";
-import { RegisterCaptchaModal } from "./RegisterCaptchaModal";
 import { ShareTestSettings } from "./ShareTestSettings";
 import { SimpleModal } from "./SimpleModal";
 import { StreakHourOffsetModal } from "./StreakHourOffsetModal";
@@ -32,7 +31,6 @@ export function Modals(): JSXElement {
       <AlertsModal />
       <VersionHistoryModal />
       <ContactModal />
-      <RegisterCaptchaModal />
       <SupportModal />
       <SimpleModal />
       <CustomTextModal />
@@ -48,7 +46,7 @@ export function Modals(): JSXElement {
       <EditPresetModal />
       <LastSignedOutResultModal />
       <StreakHourOffsetModal />
-      <GoogleSignupModal />
+      <PickUsernameModal />
       <ForgotPasswordModal />
       <EditResultTagsModal />
       <TheRestModal />

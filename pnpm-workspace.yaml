@@ -12,6 +12,7 @@ allowBuilds:
   "@parcel/watcher": true
   "@sentry/cli": true
   bcrypt: true
+  browser-tabs-lock: false
   core-js: true
   cpu-features: true
   esbuild: true

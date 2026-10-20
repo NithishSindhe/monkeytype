@@ -1,11 +1,11 @@
 import { createForm } from "@tanstack/solid-form";
-import { JSXElement } from "solid-js";
+import { createSignal, JSXElement, Show } from "solid-js";
 
 import {
   AuthResult,
-  getAuthMethodDisplay,
   signIn,
   signInWithProvider,
+  submitEmailCode,
 } from "../../../auth";
 import {
   disableLoginPageInputs,
@@ -26,6 +26,9 @@ import { SubmitButton } from "../../ui/form/SubmitButton";
 import { allFieldsMandatory } from "../../ui/form/utils";
 
 export function Login(): JSXElement {
+  // Clerk asked for the code it emailed: the form swaps to a code entry step
+  const [needsEmailCode, setNeedsEmailCode] = createSignal(false);
+
   const trySignIn = async (
     auth: () => Promise<AuthResult>,
     label?: string,
@@ -33,7 +36,12 @@ export function Login(): JSXElement {
     disableLoginPageInputs();
     try {
       const data = await auth();
-      if (!data.success) {
+      if (data.status === "needsEmailCode") {
+        setNeedsEmailCode(true);
+        showNoticeNotification("We emailed you a verification code");
+        return;
+      }
+      if (data.status === "error") {
         showErrorNotification(
           `Failed to sign in${label !== undefined ? ` with ${label}` : ""}: ${data.message}`,
         );
@@ -61,6 +69,20 @@ export function Login(): JSXElement {
     },
   }));
 
+  const codeForm = createForm(() => ({
+    defaultValues: {
+      code: "",
+    },
+    onSubmit: async ({ value }) =>
+      await trySignIn(async () => submitEmailCode(value.code)),
+    onSubmitInvalid: () => {
+      showNoticeNotification("Please fill in all fields");
+    },
+    validators: {
+      onChange: allFieldsMandatory(),
+    },
+  }));
+
   return (
     <div class="grid w-full grid-cols-1 justify-center gap-2 sm:w-80">
       <H3
@@ -70,92 +92,111 @@ export function Login(): JSXElement {
         }}
         class="p-0"
       />
-      <div class="grid grid-cols-2 gap-4">
+      <Show
+        when={!needsEmailCode()}
+        fallback=<form
+          class="grid w-full gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void codeForm.handleSubmit();
+          }}
+        >
+          <p class="text-sm text-sub">
+            Enter the verification code we emailed you.
+          </p>
+          <codeForm.Field
+            name="code"
+            children={(field) => (
+              <InputField
+                field={field}
+                placeholder="verification code"
+                autocomplete="one-time-code"
+                disabled={!getLoginPageInputsEnabled()}
+              />
+            )}
+          />
+          <SubmitButton
+            form={codeForm}
+            fa={{ icon: "fa-sign-in-alt" }}
+            text="verify"
+            disabled={!getLoginPageInputsEnabled()}
+          />
+        </form>
+      >
         <Button
           fa={{ icon: "fa-google", variant: "brand" }}
+          text="sign in with google"
           onClick={() =>
             void trySignIn(
               async () =>
                 signInWithProvider("google", {
                   rememberMe: form.getFieldValue("rememberMe"),
                 }),
-              getAuthMethodDisplay("google"),
+              "Google",
             )
           }
           disabled={!getLoginPageInputsEnabled()}
         />
+        <form
+          class="grid w-full gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void form.handleSubmit();
+          }}
+        >
+          <Separator text="or" />
+          <form.Field
+            name="email"
+            children={(field) => (
+              <InputField
+                field={field}
+                placeholder="email"
+                autocomplete="current-email"
+                disabled={!getLoginPageInputsEnabled()}
+              />
+            )}
+          />
+          <form.Field
+            name="password"
+            children={(field) => (
+              <InputField
+                field={field}
+                placeholder="password"
+                type="password"
+                autocomplete="current-password"
+                disabled={!getLoginPageInputsEnabled()}
+              />
+            )}
+          />
+          <form.Field
+            name="rememberMe"
+            children={(field) => (
+              <Checkbox
+                field={field}
+                disabled={!getLoginPageInputsEnabled()}
+                label="remember me"
+              />
+            )}
+          />
+
+          <SubmitButton
+            form={form}
+            fa={{ icon: "fa-sign-in-alt" }}
+            text="sign in"
+            disabled={!getLoginPageInputsEnabled()}
+          />
+        </form>
+
         <Button
-          fa={{ icon: "fa-github", variant: "brand" }}
-          onClick={() =>
-            void trySignIn(
-              async () =>
-                signInWithProvider("github", {
-                  rememberMe: form.getFieldValue("rememberMe"),
-                }),
-              getAuthMethodDisplay("github"),
-            )
-          }
+          text="forgot password?"
+          variant="text"
+          class="text justify-end text-xs"
+          onClick={() => showModal("ForgotPassword")}
           disabled={!getLoginPageInputsEnabled()}
         />
-      </div>
-      <form
-        class="grid w-full gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          void form.handleSubmit();
-        }}
-      >
-        <Separator text="or" />
-        <form.Field
-          name="email"
-          children={(field) => (
-            <InputField
-              field={field}
-              placeholder="email"
-              autocomplete="current-email"
-              disabled={!getLoginPageInputsEnabled()}
-            />
-          )}
-        />
-        <form.Field
-          name="password"
-          children={(field) => (
-            <InputField
-              field={field}
-              placeholder="password"
-              type="password"
-              autocomplete="current-password"
-              disabled={!getLoginPageInputsEnabled()}
-            />
-          )}
-        />
-        <form.Field
-          name="rememberMe"
-          children={(field) => (
-            <Checkbox
-              field={field}
-              disabled={!getLoginPageInputsEnabled()}
-              label="remember me"
-            />
-          )}
-        />
-
-        <SubmitButton
-          form={form}
-          fa={{ icon: "fa-sign-in-alt" }}
-          text="sign in"
-          disabled={!getLoginPageInputsEnabled()}
-        />
-      </form>
-
-      <Button
-        text="forgot password?"
-        variant="text"
-        class="text justify-end text-xs"
-        onClick={() => showModal("ForgotPassword")}
-        disabled={!getLoginPageInputsEnabled()}
-      />
+      </Show>
     </div>
   );
 }

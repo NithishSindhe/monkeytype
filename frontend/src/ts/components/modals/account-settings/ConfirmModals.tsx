@@ -1,11 +1,7 @@
 import { z } from "zod";
 
 import Ape from "../../../ape";
-import {
-  getPasswordSchema,
-  isUsingPasswordAuthentication,
-  reauthenticate,
-} from "../../../auth";
+import { signOut } from "../../../auth";
 import { resetConfig } from "../../../config/lifecycle";
 import { getSnapshot } from "../../../db";
 import { isAuthenticated } from "../../../states/core";
@@ -15,7 +11,7 @@ import FileStorage from "../../../utils/file-storage";
 import { reloadAfter } from "../../../utils/misc";
 
 export function showDeleteAccountModal(): void {
-  showReauthConfirmModal({
+  showConfirmModal({
     title: "Delete account",
     buttonText: "delete",
     confirmText: `I understand that all my data will be deleted and cannot be recovered.`,
@@ -30,6 +26,10 @@ export function showDeleteAccountModal(): void {
           notificationOptions: { response },
         };
       }
+
+      // only the Monkeytype profile is gone: the Clerk account is shared with
+      // other apps, so it is kept and the user is just signed out here
+      signOut();
       reloadAfter(3);
 
       return {
@@ -41,7 +41,7 @@ export function showDeleteAccountModal(): void {
 }
 
 export function showResetAccountModal(): void {
-  showReauthConfirmModal({
+  showConfirmModal({
     title: "Reset account",
     buttonText: "reset",
     confirmText: `I understand that my account will be completely reset and that this cannot be undone.`,
@@ -72,7 +72,7 @@ export function showResetAccountModal(): void {
 }
 
 export function showResetPersonalBestsModal(): void {
-  showReauthConfirmModal({
+  showConfirmModal({
     title: "Reset personal bests",
     buttonText: "reset",
     confirmText: `I understand that all my personal bests will be deleted and that this cannot be undone.`,
@@ -111,7 +111,7 @@ export function showResetPersonalBestsModal(): void {
 }
 
 export function showRevokeAllTokensModal() {
-  showReauthConfirmModal({
+  showConfirmModal({
     title: "Revoke all tokens",
     confirmText: `I understand that all my tokens will get revoked and that I will be logged out of all devices.`,
     buttonText: "revoke all",
@@ -135,7 +135,11 @@ export function showRevokeAllTokensModal() {
   });
 }
 
-function showReauthConfirmModal(options: {
+/**
+ * A destructive action behind a confirmation checkbox. Clerk has no
+ * reauthentication api, so the checkbox is the only gate.
+ */
+function showConfirmModal(options: {
   title: string;
   buttonText: string;
   confirmText: string;
@@ -145,35 +149,17 @@ function showReauthConfirmModal(options: {
 
   showSimpleModal({
     title: options.title,
-    buttonText: isUsingPasswordAuthentication()
-      ? options.buttonText
-      : `reauthenticate to ${options.buttonText}`,
+    buttonText: options.buttonText,
     schema: z.object({
-      password: getPasswordSchema(),
       confirm: z.literal(true),
     }),
     inputs: {
-      password: {
-        placeholder: "password",
-        type: "password",
-        hidden: !isUsingPasswordAuthentication(),
-      },
       confirm: {
         type: "checkbox",
         label: options.confirmText,
       },
     },
 
-    execFn: async ({ password }) => {
-      const reauth = await reauthenticate({ password });
-      if (reauth.status !== "success") {
-        return {
-          status: reauth.status,
-          message: reauth.message,
-        };
-      }
-
-      return options.action();
-    },
+    execFn: async () => options.action(),
   });
 }

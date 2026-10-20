@@ -18,6 +18,7 @@ import { createRouterPage } from "../components/core/Page";
 import { ProfilePage } from "../components/pages/profile/ProfilePage";
 import { ProfileSearchPage } from "../components/pages/profile/ProfileSearchPage";
 import { SettingsPage } from "../components/pages/settings/SettingsPage";
+import { SsoCallbackPage } from "../components/pages/SsoCallbackPage";
 import { TestPage } from "../components/pages/test/TestPage";
 import { getUserProfile } from "../queries/profile";
 import {
@@ -37,8 +38,6 @@ import {
 } from "./loading-bar";
 import { applyUrlActions } from "../url-actions/apply";
 
-// NOTE: whenever adding a route add the pathname to the `firebase.json` rewrite rule
-
 /** A page of the site, rendered by its route (see `staticData.page`). */
 export type PageName =
   | "loading"
@@ -50,7 +49,8 @@ export type PageName =
   | "profile"
   | "profileSearch"
   | "404"
-  | "accountSettings";
+  | "accountSettings"
+  | "ssoCallback";
 
 declare module "@tanstack/solid-router" {
   // oxlint-disable-next-line typescript/consistent-type-definitions -- module augmentation needs an interface
@@ -263,6 +263,16 @@ const accountSettings = createRoute({
   beforeLoad: ({ context }) => signedInOnly(context.auth),
 });
 
+// Clerk sends the browser back here after a Google sign in. It sits outside
+// the userData layout: there is no user data to wait for until Clerk
+// activated the session.
+const ssoCallback = createRoute({
+  getParentRoute: () => root,
+  path: "/sso-callback",
+  staticData: { page: "ssoCallback" },
+  component: createRouterPage(SsoCallbackPage),
+});
+
 const profileSearch = createRoute({
   getParentRoute: () => userDataRoute,
   path: "/profile",
@@ -282,6 +292,7 @@ const profile = createRoute({
 });
 
 export const routeTree = root.addChildren([
+  ssoCallback,
   userDataRoute.addChildren([
     test,
     about,

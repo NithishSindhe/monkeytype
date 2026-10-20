@@ -1,7 +1,7 @@
 import { showModal } from "../../../states/modals";
 import { getSnapshot } from "../../../states/snapshot";
 import { Fa } from "../../common/Fa";
-import { showResetPersonalBestsModal } from "../../modals/account-settings/ReauthConfirmModals";
+import { showResetPersonalBestsModal } from "../../modals/account-settings/ConfirmModals";
 import { showUpdateNameModal } from "../../modals/account-settings/UpdateNameModal";
 import { Section } from "./utils";
 

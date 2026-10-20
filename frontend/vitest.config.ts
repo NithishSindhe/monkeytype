@@ -27,7 +27,7 @@ export const projects: UserWorkspaceConfig[] = [
       globalSetup: "__tests__/global-setup.ts",
       setupFiles: [
         "__tests__/__harness__/mock-dom.ts",
-        "__tests__/__harness__/mock-firebase.ts",
+        "__tests__/__harness__/mock-auth-client.ts",
         "__tests__/__harness__/mock-env-config.ts",
         "__tests__/__harness__/mock-static.ts",
       ],
@@ -58,7 +58,7 @@ export const projects: UserWorkspaceConfig[] = [
       setupFiles: [
         "__tests__/__harness__/setup-jsx.ts",
         "__tests__/__harness__/mock-dom.ts",
-        "__tests__/__harness__/mock-firebase.ts",
+        "__tests__/__harness__/mock-auth-client.ts",
       ],
       globals: true,
     },

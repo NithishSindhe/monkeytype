@@ -1,7 +1,7 @@
 import {
   showDeleteAccountModal,
   showResetAccountModal,
-} from "../../modals/account-settings/ReauthConfirmModals";
+} from "../../modals/account-settings/ConfirmModals";
 import { Section } from "./utils";
 
 export function DangerZoneTab() {

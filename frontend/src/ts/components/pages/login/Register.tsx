@@ -1,9 +1,9 @@
 import { UserEmailSchema, UserNameSchema } from "@monkeytype/schemas/users";
 import { createForm } from "@tanstack/solid-form";
-import { JSXElement } from "solid-js";
+import { createSignal, JSXElement, Show } from "solid-js";
 
 import Ape from "../../../ape";
-import { getPasswordSchema, signUp } from "../../../auth";
+import { getPasswordSchema, signUp, submitEmailCode } from "../../../auth";
 import TypoList from "../../../constants/typo-list";
 import {
   disableLoginPageInputs,
@@ -16,7 +16,6 @@ import {
 } from "../../../states/notifications";
 import { remoteValidationForm } from "../../../utils/remote-validation";
 import { H3 } from "../../common/Headers";
-import { showRegisterCaptchaModal } from "../../modals/RegisterCaptchaModal";
 import { InputField } from "../../ui/form/InputField";
 import { SubmitButton } from "../../ui/form/SubmitButton";
 import {
@@ -30,6 +29,9 @@ let disposableEmailModule: typeof import("disposable-email-domains-js") | null =
 let moduleLoadAttempted = false;
 
 export function Register(): JSXElement {
+  // Clerk emailed a verification code: the form swaps to a code entry step
+  const [needsEmailCode, setNeedsEmailCode] = createSignal(false);
+
   const emailIsValid = async (
     email: string,
   ): Promise<undefined | ValidationResult[]> => {
@@ -80,20 +82,37 @@ export function Register(): JSXElement {
     },
     onSubmit: async ({ value }) => {
       disableLoginPageInputs();
-      const captchaToken = await showRegisterCaptchaModal();
-      if (captchaToken === undefined || captchaToken === "") {
-        showErrorNotification("Please complete the captcha");
-        enableLoginPageInputs();
-        return;
-      }
       try {
-        const data = await signUp(
-          value.username,
-          value.email,
-          value.password,
-          captchaToken,
-        );
-        if (!data.success) {
+        const data = await signUp(value.username, value.email, value.password);
+        if (data.status === "needsEmailCode") {
+          setNeedsEmailCode(true);
+          showNoticeNotification("We emailed you a verification code");
+          return;
+        }
+        if (data.status === "error") {
+          showErrorNotification(data.message);
+        }
+      } finally {
+        enableLoginPageInputs();
+      }
+    },
+    onSubmitInvalid: () => {
+      showNoticeNotification("Please fill in all fields");
+    },
+    validators: {
+      onChange: allFieldsMandatory(),
+    },
+  }));
+
+  const codeForm = createForm(() => ({
+    defaultValues: {
+      code: "",
+    },
+    onSubmit: async ({ value }) => {
+      disableLoginPageInputs();
+      try {
+        const data = await submitEmailCode(value.code);
+        if (data.status === "error") {
           showErrorNotification(data.message);
         }
       } finally {
@@ -117,137 +136,172 @@ export function Register(): JSXElement {
         }}
         class="p-0"
       />
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (!form.state.canSubmit || !form.state.isValid) {
-            form.options.onSubmitInvalid?.({
+      <Show
+        when={!needsEmailCode()}
+        fallback=<form
+          class="grid w-full gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void codeForm.handleSubmit();
+          }}
+        >
+          <p class="text-sm text-sub">
+            Enter the verification code we emailed you.
+          </p>
+          <codeForm.Field
+            name="code"
+            children={(field) => (
+              <InputField
+                field={field}
+                placeholder="verification code"
+                autocomplete="one-time-code"
+                disabled={!getLoginPageInputsEnabled()}
+              />
+            )}
+          />
+          <SubmitButton
+            form={codeForm}
+            fa={{ icon: "fa-user-plus" }}
+            text="verify"
+            disabled={!getLoginPageInputsEnabled()}
+          />
+        </form>
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!form.state.canSubmit || !form.state.isValid) {
+              form.options.onSubmitInvalid?.({
+                value: form.state.values,
+                formApi: form,
+                meta: undefined,
+              });
+              return;
+            }
+            // we are calling onSubmit manually to bypass an unnecessary extra validation
+            // that runs when running handleSubmit, since we block the submit button when the form is invalid
+            void form.options.onSubmit?.({
               value: form.state.values,
               formApi: form,
               meta: undefined,
             });
-            return;
-          }
-          // we are calling onSubmit manually to bypass an unnecessary extra validation
-          // that runs when running handleSubmit, since we block the submit button when the form is invalid
-          void form.options.onSubmit?.({
-            value: form.state.values,
-            formApi: form,
-            meta: undefined,
-          });
-        }}
-        action=""
-        // oxlint-disable-next-line react/no-unknown-property
-        autocomplete="off"
-        class="grid w-full gap-2"
-      >
-        <form.Field
-          name="username"
-          validators={{
-            onChange: fromSchema(UserNameSchema),
-            onChangeAsyncDebounceMs: 1000,
-            onChangeAsync: remoteValidationForm(
-              async (name: string) =>
-                Ape.users.getNameAvailability({ params: { name } }),
-              { check: (data) => data.available || "Name not available" },
-            ),
           }}
-          children={(field) => (
-            <InputField
-              field={field}
-              placeholder="username"
-              autocomplete="new-username"
-              disabled={!getLoginPageInputsEnabled()}
-            />
-          )}
-        />
-        <form.Field
-          name="email"
-          validators={{
-            onChange: fromSchema(UserEmailSchema),
-            onChangeAsyncDebounceMs: 0,
-            onChangeAsync: async (field) =>
-              handleResult(field.fieldApi, await emailIsValid(field.value)),
-          }}
-          children={(field) => (
-            <InputField
-              field={field}
-              placeholder="email"
-              autocomplete="new-email"
-              disabled={!getLoginPageInputsEnabled()}
-              onFocus={() => {
-                if (!moduleLoadAttempted) {
-                  moduleLoadAttempted = true;
-                  void import("disposable-email-domains-js")
-                    .then((it) => (disposableEmailModule = it))
-                    .catch(() => {
-                      // Silent failure
-                    });
-                }
-              }}
-            />
-          )}
-        />
-        <form.Field
-          name="emailVerify"
-          validators={{
-            onChangeListenTo: ["email"],
-            onChange: (field) =>
-              field.value === field.fieldApi.form.getFieldValue("email")
-                ? undefined
-                : "verify email not matching email",
-          }}
-          children={(field) => (
-            <InputField
-              field={field}
-              autocomplete="verify-email"
-              placeholder="verify email"
-              disabled={!getLoginPageInputsEnabled()}
-            />
-          )}
-        />
-        <form.Field
-          name="password"
-          validators={{
-            onChange: fromSchema(getPasswordSchema({ isNew: true })),
-          }}
-          children={(field) => (
-            <InputField
-              field={field}
-              placeholder="password"
-              autocomplete="new-password"
-              type="password"
-              disabled={!getLoginPageInputsEnabled()}
-            />
-          )}
-        />
-        <form.Field
-          name="passwordVerify"
-          validators={{
-            onChangeListenTo: ["password"],
-            onChange: (field) =>
-              field.value === field.fieldApi.form.getFieldValue("password")
-                ? undefined
-                : "verify password not matching password",
-          }}
-          children={(field) => (
-            <InputField
-              field={field}
-              placeholder="verify password"
-              autocomplete="verify-password"
-              type="password"
-              disabled={!getLoginPageInputsEnabled()}
-            />
-          )}
-        />
-        <SubmitButton
-          form={form}
-          fa={{ icon: "fa-user-plus" }}
-          text="sign up"
-          disabled={!getLoginPageInputsEnabled()}
-        />
-      </form>
+          action=""
+          // oxlint-disable-next-line react/no-unknown-property
+          autocomplete="off"
+          class="grid w-full gap-2"
+        >
+          <form.Field
+            name="username"
+            validators={{
+              onChange: fromSchema(UserNameSchema),
+              onChangeAsyncDebounceMs: 1000,
+              onChangeAsync: remoteValidationForm(
+                async (name: string) =>
+                  Ape.users.getNameAvailability({ params: { name } }),
+                { check: (data) => data.available || "Name not available" },
+              ),
+            }}
+            children={(field) => (
+              <InputField
+                field={field}
+                placeholder="username"
+                autocomplete="new-username"
+                disabled={!getLoginPageInputsEnabled()}
+              />
+            )}
+          />
+          <form.Field
+            name="email"
+            validators={{
+              onChange: fromSchema(UserEmailSchema),
+              onChangeAsyncDebounceMs: 0,
+              onChangeAsync: async (field) =>
+                handleResult(field.fieldApi, await emailIsValid(field.value)),
+            }}
+            children={(field) => (
+              <InputField
+                field={field}
+                placeholder="email"
+                autocomplete="new-email"
+                disabled={!getLoginPageInputsEnabled()}
+                onFocus={() => {
+                  if (!moduleLoadAttempted) {
+                    moduleLoadAttempted = true;
+                    void import("disposable-email-domains-js")
+                      .then((it) => (disposableEmailModule = it))
+                      .catch(() => {
+                        // Silent failure
+                      });
+                  }
+                }}
+              />
+            )}
+          />
+          <form.Field
+            name="emailVerify"
+            validators={{
+              onChangeListenTo: ["email"],
+              onChange: (field) =>
+                field.value === field.fieldApi.form.getFieldValue("email")
+                  ? undefined
+                  : "verify email not matching email",
+            }}
+            children={(field) => (
+              <InputField
+                field={field}
+                autocomplete="verify-email"
+                placeholder="verify email"
+                disabled={!getLoginPageInputsEnabled()}
+              />
+            )}
+          />
+          <form.Field
+            name="password"
+            validators={{
+              onChange: fromSchema(getPasswordSchema({ isNew: true })),
+            }}
+            children={(field) => (
+              <InputField
+                field={field}
+                placeholder="password"
+                autocomplete="new-password"
+                type="password"
+                disabled={!getLoginPageInputsEnabled()}
+              />
+            )}
+          />
+          <form.Field
+            name="passwordVerify"
+            validators={{
+              onChangeListenTo: ["password"],
+              onChange: (field) =>
+                field.value === field.fieldApi.form.getFieldValue("password")
+                  ? undefined
+                  : "verify password not matching password",
+            }}
+            children={(field) => (
+              <InputField
+                field={field}
+                placeholder="verify password"
+                autocomplete="verify-password"
+                type="password"
+                disabled={!getLoginPageInputsEnabled()}
+              />
+            )}
+          />
+          {/* Clerk bot protection renders its challenge into this element */}
+          <div id="clerk-captcha"></div>
+          <SubmitButton
+            form={form}
+            fa={{ icon: "fa-user-plus" }}
+            text="sign up"
+            disabled={!getLoginPageInputsEnabled()}
+          />
+        </form>
+      </Show>
     </div>
   );
 }

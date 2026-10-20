@@ -29,7 +29,10 @@ export function envConfig(options: {
             "http://localhost:5005",
           ),
           clientVersion: options.clientVersion,
-          recaptchaSiteKey: "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI",
+          clerkPublishableKey: fallback(
+            options.env["CLERK_PUBLISHABLE_KEY"],
+            "",
+          ),
           quickLoginEmail: options.env["QUICK_LOGIN_EMAIL"],
           quickLoginPassword: options.env["QUICK_LOGIN_PASSWORD"],
         };
@@ -40,7 +43,7 @@ export function envConfig(options: {
             options.env["BACKEND_URL"],
             "https://api.monkeytype.com",
           ),
-          recaptchaSiteKey: options.env["RECAPTCHA_SITE_KEY"] ?? "",
+          clerkPublishableKey: options.env["CLERK_PUBLISHABLE_KEY"] ?? "",
           quickLoginEmail: undefined,
           quickLoginPassword: undefined,
           clientVersion: options.clientVersion,

@@ -4,7 +4,7 @@
 
 import * as AdController from "../controllers/ad-controller";
 import { authEvent } from "../events/auth";
-import { isAuthAvailable } from "../firebase";
+import { isAuthAvailable } from "../auth-client";
 import { queryClient } from "../queries";
 import { isAuthenticated } from "../states/core";
 import { getRoutePage } from "../states/router";
