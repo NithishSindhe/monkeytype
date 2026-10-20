@@ -7,12 +7,11 @@
   - [Prerequisites](#prerequisites)
     - [Git](#git)
     - [NodeJS and PNPM](#nodejs-and-pnpm)
-    - [Docker (Recommended but Optional)](#docker-recommended-but-optional)
     - [Firebase (optional)](#firebase-optional)
     - [Config file](#config-file)
     - [Databases (optional if running frontend only)](#databases-optional-if-running-frontend-only)
   - [Building and Running Monkeytype](#building-and-running-monkeytype)
-    - [Dependencies (if running manually)](#dependencies-if-running-manually)
+    - [Dependencies](#dependencies)
     - [Both Frontend and Backend](#both-frontend-and-backend)
     - [Backend only](#backend-only)
     - [Frontend only](#frontend-only)
@@ -21,7 +20,7 @@
 
 ## Prerequisites
 
-This contribution guide is for cases in which you need to test the functionality of your changes, or if you need to take screenshots of your changes. You will need a computer with a stable internet connection, a text editor, Git, and NodeJS with version 24.11.0. There are some additional requirements depending on what you're looking to contribute, such as Firebase for authentication, and Mongo and Docker for the backend. Read the below sections to understand how to set up each of these tools.
+This contribution guide is for cases in which you need to test the functionality of your changes, or if you need to take screenshots of your changes. You will need a computer with a stable internet connection, a text editor, Git, and NodeJS with version 24.11.0. There are some additional requirements depending on what you're looking to contribute, such as Firebase for authentication and MongoDB for the backend. Read the below sections to understand how to set up each of these tools.
 
 ### Git
 
@@ -39,10 +38,6 @@ If you use `nvm` (if you use Windows, use [nvm-windows](https://github.com/corey
 Alternatively, you can navigate to the NodeJS [website](https://nodejs.org/en/) to download it from there.
 
 For package management, we use `pnpm` instead of `npm` or `yarn`. You can install it by running `npm i -g pnpm@11.21.0`. This will install `pnpm` globally on your machine.
-
-### Docker (Recommended but Optional)
-
-You can use docker to run the frontend and backend. This will take care of OS-specific problems but might be a bit more resource-intensive. You can download it from the [Docker website](https://www.docker.com/get-started/#h_installation).
 
 ### Firebase (optional)
 
@@ -102,22 +97,20 @@ Follow these steps if you want to work on anything involving the database/accoun
 
 1. Inside the backend folder, copy `example.env` to `.env` in the same directory.
 
-   - The backend Docker scripts read port bindings from this file. If `27017`, `6379`, or `5005` are already in use on your machine, update `DOCKER_DB_PORT`, `DOCKER_REDIS_PORT`, and `DOCKER_SERVER_PORT` before starting Docker.
-
 2. Setup the database server
 
-| Manual                                                                                                                                                                                                                                                         | Docker (recommended)                                                                                                                                                        |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| <ol><li>Install [MongoDB Community Edition](https://docs.mongodb.com/manual/administration/install-community/)</li><li>Install [Redis](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/)</li><li>Make sure both are running</li></ol> | <ol><li>Install [Docker](http://www.docker.io/gettingstarted/#h_installation) on your machine</li><li>Run `npm run docker-db-only` from the `./backend` directory</li></ol> |
+   1. Install [MongoDB Community Edition](https://docs.mongodb.com/manual/administration/install-community/)
+   2. Install [Redis](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/)
+   3. Make sure both are running
 
 3. (Optional) Install [MongoDB-compass](https://www.mongodb.com/try/download/compass?tck=docs_compass). This tool can be used to see and manipulate your database visually.
    - To connect, type `mongodb://localhost:27017` in the connection string box and press connect. The Monkeytype database will be created and shown after the server is started.
 
 ## Building and Running Monkeytype
 
-It's time to run Monkeytype. Just like with the databases, you can run the frontend and backend manually or with Docker.
+It's time to run Monkeytype.
 
-### Dependencies (if running manually)
+### Dependencies
 
 Run `pnpm i` in the project root to install all dependencies.
 
@@ -131,15 +124,15 @@ npm run dev
 
 ### Backend only
 
-| Manual           | Docker                         |
-| ---------------- | ------------------------------ |
-| `npm run dev-be` | `cd backend && npm run docker` |
+```
+npm run dev-be
+```
 
 ### Frontend only
 
-| Manual           | Docker                          |
-| ---------------- | ------------------------------- |
-| `npm run dev-fe` | `cd frontend && npm run docker` |
+```
+npm run dev-fe
+```
 
 By default, these commands will start a local development website on [port 3000](http://localhost:3000) and a local development server on [port 5005](http://localhost:5005). They will automatically rebuild the website/server when you make changes in the `src/` directory. Use <kbd>Ctrl+C</kbd> to stop them.
 
