@@ -6,7 +6,6 @@ import {
   getSupportersQueryOptions,
 } from "../../queries/public";
 import { showModal } from "../../states/modals";
-import { Advertisement } from "../common/Advertisement";
 import AsyncContent from "../common/AsyncContent";
 import { Button } from "../common/Button";
 import { H2, H3 } from "../common/Headers";
@@ -93,7 +92,6 @@ export function AboutPage(): JSXElement {
           </dd>
         </dl>
       </section>
-      <Advertisement id="ad-about-1" visible="sellout" />
       <section>
         <H3 fa={{ icon: "fa-chart-area" }} text="results screen" />
         <p>
@@ -194,8 +192,7 @@ export function AboutPage(): JSXElement {
             href="#supporters_title"
             class="p-0 pt-2 pr-2 pb-2"
           />
-          who helped financially by donating, enabling optional ads or buying
-          merch
+          who helped financially by donating
         </p>
         <p>
           <Button
@@ -208,7 +205,6 @@ export function AboutPage(): JSXElement {
           themes and more
         </p>
       </section>
-      <Advertisement id="ad-about-2" visible="sellout" />
       <div></div>
       <section>
         <H2

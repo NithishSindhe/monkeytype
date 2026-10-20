@@ -1,10 +1,7 @@
 import { createEffect, createSignal, JSXElement } from "solid-js";
 
-import { showConsentPopup } from "../../controllers/ad-controller";
 import { getAcceptedCookies, setAcceptedCookies } from "../../cookies";
 import { hideModal, isModalOpen } from "../../states/modals";
-import { showErrorNotification } from "../../states/notifications";
-import { cn } from "../../utils/cn";
 import { AnimatedModal } from "../common/AnimatedModal";
 import { AnimeSwitch } from "../common/anime";
 import { AnimeMatch } from "../common/anime/AnimeMatch";
@@ -133,39 +130,6 @@ export function CookiesModal(): JSXElement {
                 setAccepted({ ...accepted(), sentry: checked })
               }
             />
-            <SettingsSection
-              title="advertising"
-              description={
-                <div class="grid grid-cols-[auto_1fr] items-center gap-4">
-                  <div>
-                    Our advertising partner may use cookies to deliver ads that
-                    are more relevant to you.
-                  </div>
-                  <Button
-                    fa={{ icon: "fa-external-link-alt", fixedWidth: true }}
-                    class="text-[0.85em]"
-                    onClick={() => {
-                      try {
-                        showConsentPopup();
-                      } catch (e) {
-                        console.error("Failed to open ad consent UI");
-                        console.error(e);
-                        showErrorNotification(
-                          "Failed to open Ad consent popup. Do you have an ad or cookie popup blocker enabled?",
-                        );
-                      }
-                    }}
-                  />
-                  {/* <Button
-                    text="Click to change your preferences on ad related cookies"
-                    variant="text"
-                    class="text-left p-0 mt-2"
-                  /> */}
-                </div>
-              }
-              checked={false}
-              hideCheckbox={true}
-            />
             <Button
               text="accept selected"
               onClick={() => {
@@ -185,16 +149,10 @@ function SettingsSection(props: {
   description: string | JSXElement;
   checked: boolean;
   disabled?: boolean;
-  hideCheckbox?: boolean;
   onChange?: (checked: boolean) => void;
 }): JSXElement {
   return (
-    <label
-      class={cn(
-        "grid grid-cols-[auto_1fr] items-center gap-2",
-        props.hideCheckbox && "grid-cols-1",
-      )}
-    >
+    <label class="grid grid-cols-[auto_1fr] items-center gap-2">
       <div class="grid gap-1">
         <div class="text-sub">{props.title}</div>
         <div class="text-text">{props.description}</div>
@@ -204,7 +162,6 @@ function SettingsSection(props: {
         class="text-2xl"
         checked={props.checked}
         disabled={props.disabled}
-        hidden={props.hideCheckbox}
         onChange={(e) => props.onChange?.(e.currentTarget.checked)}
       />
     </label>

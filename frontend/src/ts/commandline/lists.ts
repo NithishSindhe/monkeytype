@@ -36,8 +36,6 @@ import {
 import { applyConfigFromJson } from "../config/lifecycle";
 import { getLastEventLog } from "../states/test";
 
-const adsCommands = buildCommands("ads");
-
 export const commands: CommandsSubgroup = {
   title: "",
   list: [
@@ -205,9 +203,6 @@ export const commands: CommandsSubgroup = {
       "monkey",
     ),
 
-    //danger zone
-    ...adsCommands,
-
     //other
     ...LoadChallengeCommands,
     ...NavigationCommands,
@@ -359,7 +354,6 @@ const lists: Record<CommandlineListKey, CommandsSubgroup | undefined> = {
   minBurst: MinBurstCommands[0]?.subgroup,
   funbox: FunboxCommands[0]?.subgroup,
   tags: TagsCommands[0]?.subgroup,
-  ads: adsCommands[0]?.subgroup,
 };
 
 const subgroupByConfigKey = Object.fromEntries(

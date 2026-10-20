@@ -16,7 +16,7 @@ describe("PresetDal", () => {
       const decoyUid = await givenUid();
       const first = await PresetDal.addPreset(uid, {
         name: "first",
-        config: { ads: "sellout" },
+        config: { punctuation: true },
       });
       const second = await PresetDal.addPreset(uid, {
         name: "second",
@@ -45,7 +45,7 @@ describe("PresetDal", () => {
             _id: first.presetId,
             uid: uid,
             name: "first",
-            config: { ads: "sellout" },
+            config: { punctuation: true },
           }),
           expect.objectContaining({
             _id: second.presetId,
@@ -88,7 +88,7 @@ describe("PresetDal", () => {
       const newPreset = await PresetDal.addPreset(uid, {
         name: "new",
         config: {
-          ads: "sellout",
+          punctuation: true,
         },
       });
 
@@ -102,7 +102,7 @@ describe("PresetDal", () => {
             _id: newPreset.presetId,
             uid: uid,
             name: "new",
-            config: { ads: "sellout" },
+            config: { punctuation: true },
           }),
         ]),
       );
@@ -126,21 +126,21 @@ describe("PresetDal", () => {
       const first = (
         await PresetDal.addPreset(uid, {
           name: "first",
-          config: { ads: "sellout" },
+          config: { punctuation: true },
         })
       ).presetId;
       const second = (
         await PresetDal.addPreset(uid, {
           name: "second",
           config: {
-            ads: "result",
+            numbers: true,
           },
         })
       ).presetId;
       const decoy = (
         await PresetDal.addPreset(decoyUid, {
           name: "unknown",
-          config: { ads: "result" },
+          config: { numbers: true },
         })
       ).presetId;
 
@@ -148,7 +148,7 @@ describe("PresetDal", () => {
       await PresetDal.editPreset(uid, {
         _id: first,
         name: "newName",
-        config: { ads: "off" },
+        config: { punctuation: false },
       });
 
       //THEN
@@ -160,13 +160,13 @@ describe("PresetDal", () => {
             _id: first,
             uid: uid,
             name: "newName",
-            config: { ads: "off" },
+            config: { punctuation: false },
           }),
           expect.objectContaining({
             _id: second,
             uid: uid,
             name: "second",
-            config: { ads: "result" },
+            config: { numbers: true },
           }),
         ]),
       );
@@ -176,7 +176,7 @@ describe("PresetDal", () => {
             _id: decoy,
             uid: decoyUid,
             name: "unknown",
-            config: { ads: "result" },
+            config: { numbers: true },
           }),
         ]),
       );
@@ -188,7 +188,7 @@ describe("PresetDal", () => {
       const first = (
         await PresetDal.addPreset(uid, {
           name: "first",
-          config: { ads: "sellout" },
+          config: { punctuation: true },
         })
       ).presetId;
 
@@ -203,7 +203,7 @@ describe("PresetDal", () => {
             _id: first,
             uid: uid,
             name: "newName",
-            config: { ads: "sellout" },
+            config: { punctuation: true },
           }),
         ]),
       );
@@ -253,7 +253,7 @@ describe("PresetDal", () => {
       const first = (
         await PresetDal.addPreset(uid, {
           name: "first",
-          config: { ads: "sellout" },
+          config: { punctuation: true },
         })
       ).presetId;
 
@@ -261,7 +261,7 @@ describe("PresetDal", () => {
       await PresetDal.editPreset(decoyUid, {
         _id: first,
         name: "newName",
-        config: { ads: "off" },
+        config: { punctuation: false },
       });
 
       //THEN
@@ -273,7 +273,7 @@ describe("PresetDal", () => {
             _id: first,
             uid: uid,
             name: "first",
-            config: { ads: "sellout" },
+            config: { punctuation: true },
           }),
         ]),
       );
@@ -298,7 +298,7 @@ describe("PresetDal", () => {
         _id: first,
         name: "newName",
         settingGroups: null,
-        config: { ads: "off" },
+        config: { punctuation: false },
       });
 
       //THEN
@@ -308,7 +308,7 @@ describe("PresetDal", () => {
             _id: first,
             uid: uid,
             name: "newName",
-            config: { ads: "off" },
+            config: { punctuation: false },
             settingGroups: null,
           }),
         ]),
@@ -321,7 +321,7 @@ describe("PresetDal", () => {
         await PresetDal.addPreset(uid, {
           name: "first",
           config: {
-            ads: "off",
+            punctuation: false,
           },
         })
       ).presetId;
@@ -376,13 +376,13 @@ describe("PresetDal", () => {
       const second = (
         await PresetDal.addPreset(uid, {
           name: "second",
-          config: { ads: "result" },
+          config: { numbers: true },
         })
       ).presetId;
       const decoy = (
         await PresetDal.addPreset(decoyUid, {
           name: "unknown",
-          config: { ads: "result" },
+          config: { numbers: true },
         })
       ).presetId;
 
@@ -398,7 +398,7 @@ describe("PresetDal", () => {
             _id: second,
             uid: uid,
             name: "second",
-            config: { ads: "result" },
+            config: { numbers: true },
           }),
         ]),
       );
@@ -408,7 +408,7 @@ describe("PresetDal", () => {
             _id: decoy,
             uid: decoyUid,
             name: "unknown",
-            config: { ads: "result" },
+            config: { numbers: true },
           }),
         ]),
       );
@@ -420,7 +420,7 @@ describe("PresetDal", () => {
       const first = (
         await PresetDal.addPreset(uid, {
           name: "first",
-          config: { ads: "sellout" },
+          config: { punctuation: true },
         })
       ).presetId;
 
@@ -438,7 +438,7 @@ describe("PresetDal", () => {
             _id: first,
             uid: uid,
             name: "first",
-            config: { ads: "sellout" },
+            config: { punctuation: true },
           }),
         ]),
       );
@@ -457,12 +457,12 @@ describe("PresetDal", () => {
       await PresetDal.addPreset(uid, { name: "first", config: {} });
       await PresetDal.addPreset(uid, {
         name: "second",
-        config: { ads: "result" },
+        config: { numbers: true },
       });
       const decoy = (
         await PresetDal.addPreset(decoyUid, {
           name: "unknown",
-          config: { ads: "result" },
+          config: { numbers: true },
         })
       ).presetId;
 
@@ -479,7 +479,7 @@ describe("PresetDal", () => {
             _id: decoy,
             uid: decoyUid,
             name: "unknown",
-            config: { ads: "result" },
+            config: { numbers: true },
           }),
         ]),
       );

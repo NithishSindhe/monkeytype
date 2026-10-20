@@ -43,7 +43,7 @@ export function setPreloading(enabled: boolean): void {
 }
 
 /**
- * The app's router, minus the app-only side effects (title, focus, ads - see
+ * The app's router, minus the app-only side effects (title, focus - see
  * router/app-router.ts). Tests build one with a test context and
  * in-memory history (see __tests__/__harness__/app-shell.tsx).
  */

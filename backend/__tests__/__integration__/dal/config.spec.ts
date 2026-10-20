@@ -14,25 +14,28 @@ describe("ConfigDal", () => {
       const uid = await givenUid();
 
       //WHEN
-      await ConfigDal.saveConfig(uid, { ads: "on", time: 60 });
+      await ConfigDal.saveConfig(uid, { punctuation: true, time: 60 });
 
       //THEN
       const saved = await ConfigDal.getConfig(uid);
-      expect(saved).toEqual({ uid, config: { ads: "on", time: 60 } });
+      expect(saved).toEqual({ uid, config: { punctuation: true, time: 60 } });
     });
 
     it("should merge into the existing config instead of replacing it", async () => {
       //GIVEN
       const uid = await givenUid();
-      await ConfigDal.saveConfig(uid, { ads: "on", time: 60 });
+      await ConfigDal.saveConfig(uid, { punctuation: true, time: 60 });
 
       //WHEN
-      await ConfigDal.saveConfig(uid, { ads: "off", difficulty: "normal" });
+      await ConfigDal.saveConfig(uid, {
+        punctuation: false,
+        difficulty: "normal",
+      });
 
       //THEN
       const saved = await ConfigDal.getConfig(uid);
       expect(saved?.config).toEqual({
-        ads: "off",
+        punctuation: false,
         time: 60,
         difficulty: "normal",
       });
@@ -42,14 +45,14 @@ describe("ConfigDal", () => {
       //GIVEN
       const uid = await givenUid();
       const decoyUid = await givenUid();
-      await ConfigDal.saveConfig(decoyUid, { ads: "on" });
+      await ConfigDal.saveConfig(decoyUid, { punctuation: true });
 
       //WHEN
-      await ConfigDal.saveConfig(uid, { ads: "off" });
+      await ConfigDal.saveConfig(uid, { punctuation: false });
 
       //THEN
       expect((await ConfigDal.getConfig(decoyUid))?.config).toEqual({
-        ads: "on",
+        punctuation: true,
       });
     });
   });
@@ -73,8 +76,8 @@ describe("ConfigDal", () => {
       //GIVEN
       const uid = await givenUid();
       const decoyUid = await givenUid();
-      await ConfigDal.saveConfig(uid, { ads: "on" });
-      await ConfigDal.saveConfig(decoyUid, { ads: "on" });
+      await ConfigDal.saveConfig(uid, { punctuation: true });
+      await ConfigDal.saveConfig(decoyUid, { punctuation: true });
 
       //WHEN
       await ConfigDal.deleteConfig(uid);

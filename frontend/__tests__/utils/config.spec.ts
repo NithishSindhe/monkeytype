@@ -25,6 +25,18 @@ describe("config.ts", () => {
       expect(result).toEqual(expect.objectContaining(getDefaultConfig()));
       expect(result).not.toHaveProperty("legacy");
     });
+    it("should drop the removed ads setting and keep the rest of the config", () => {
+      const partialConfig = {
+        ads: "sellout",
+        punctuation: true,
+        time: 60,
+      } as PartialConfig;
+
+      const result = migrateConfig(partialConfig);
+      expect(result).not.toHaveProperty("ads");
+      expect(result.punctuation).toBe(true);
+      expect(result.time).toBe(60);
+    });
     it("should correctly merge properties of various types", () => {
       const partialConfig = {
         mode: "quote",

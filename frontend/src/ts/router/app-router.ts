@@ -1,8 +1,7 @@
 // The app's router instance: real auth and query client, the router type
-// registration, and app-only side effects (title, og:url, focus, ads).
+// registration, and app-only side effects (title, og:url, focus).
 // Importing it creates the router - tests use createAppRouter instead
 
-import * as AdController from "../controllers/ad-controller";
 import { authEvent } from "../events/auth";
 import { isAuthAvailable } from "../auth-client";
 import { queryClient } from "../queries";
@@ -61,7 +60,6 @@ router.subscribe("onResolved", () => {
 
   updatePageTitle(page);
   Focus.set(false);
-  void AdController.reinstate();
 });
 
 function updatePageTitle(page: PageName): void {

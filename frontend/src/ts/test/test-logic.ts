@@ -27,7 +27,6 @@ import {
   updateCrown,
 } from "./result-pb";
 import { showConfetti } from "../elements/confetti";
-import * as AdController from "../controllers/ad-controller";
 import * as ConnectionState from "../legacy-states/connection";
 import * as Focus from "./focus";
 import * as Arrays from "../utils/arrays";
@@ -1192,7 +1191,6 @@ async function showResult(
   ) {
     toggleResultWords(true);
   }
-  AdController.updateFooterAndVerticalAds(true);
   void Funbox.clear();
 
   setResultLoading(false);
@@ -1201,7 +1199,6 @@ async function showResult(
   const resultPrefocusTarget = qs("#resultButtonsPrefocusTarget");
   resultPrefocusTarget?.focus({ preventScroll: true });
 
-  void AdController.renderResult();
   setResultCalculating(false);
   TestUI.clearWords();
 }

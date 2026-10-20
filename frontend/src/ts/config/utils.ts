@@ -41,6 +41,11 @@ function sanitizeConfig(
 function replaceLegacyValues(
   configObj: ConfigSchemas.PartialConfig,
 ): ConfigSchemas.PartialConfig {
+  // removed setting, sanitizeConfig would strip it anyway - explicit for clarity
+  if ("ads" in configObj) {
+    delete (configObj as Record<string, unknown>)["ads"];
+  }
+
   //@ts-expect-error legacy configs
   if (configObj.quickTab === true && configObj.quickRestart === undefined) {
     configObj.quickRestart = "tab";

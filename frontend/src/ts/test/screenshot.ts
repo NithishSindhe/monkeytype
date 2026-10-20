@@ -22,7 +22,7 @@ function prepare(): void {
     Replay.pauseReplay();
   }
 
-  // the result components hide the buttons, replay, login tip and ads and show the watermark
+  // the result components hide the buttons, replay and login tip and show the watermark
   setIsScreenshotting(true);
   qs("noscript")?.hide();
   qs("#nocss")?.hide();

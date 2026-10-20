@@ -1,6 +1,5 @@
 import { JSXElement } from "solid-js";
 
-import { showCommandline } from "../../states/commandline";
 import { AnimatedModal } from "../common/AnimatedModal";
 import { Button } from "../common/Button";
 import { Fa } from "../common/Fa";
@@ -21,20 +20,7 @@ export function SupportModal(): JSXElement {
         not be possible without you and your continued support.{" "}
         <Fa icon="fa-heart" />
       </div>
-      <div class="grid grid-cols-1 gap-4 xs:grid-cols-2 md:grid-cols-4">
-        <Button
-          variant="button"
-          onClick={() => {
-            showCommandline({ subgroupOverride: "ads" });
-          }}
-          fa={{
-            icon: "fa-ad",
-            fixedWidth: true,
-            size: iconScale,
-          }}
-          text="Enable Ads"
-          class={buttonClass}
-        />
+      <div class="grid grid-cols-1 gap-4 xs:grid-cols-2">
         <Button
           variant="button"
           href="https://ko-fi.com/monkeytype"
@@ -56,17 +42,6 @@ export function SupportModal(): JSXElement {
             size: iconScale,
           }}
           text="Join Patreon"
-          class={buttonClass}
-        />
-        <Button
-          variant="button"
-          href="https://monkeytype.store"
-          fa={{
-            icon: "fa-tshirt",
-            fixedWidth: true,
-            size: iconScale,
-          }}
-          text="Buy Merch"
           class={buttonClass}
         />
       </div>

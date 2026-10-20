@@ -309,17 +309,15 @@ describe("Config", () => {
 
     it("calls afterSet", () => {
       //GIVEN
-      isDevEnvironmentMock.mockReturnValue(false);
-      replaceConfig({ ads: "off" });
+      replaceConfig({ mode: "time", paceCaret: "pb" });
 
       //WHEN
-      Config.setConfig("ads", "sellout");
+      Config.setConfig("mode", "zen");
 
       //THEN
       expect(notificationAddMock).toHaveBeenCalledWith(
-        "Ad settings changed. Refreshing...",
+        "Pace caret will not work with zen mode.",
       );
-      expect(miscReloadAfterMock).toHaveBeenCalledWith(3);
     });
   });
 

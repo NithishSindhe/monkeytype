@@ -8,8 +8,6 @@ import { getDefaultConfig } from "../constants/default-config";
 import { isAuthenticated } from "../states/core";
 import { showNoticeNotification } from "../states/notifications";
 import { FaObject } from "../types/font-awesome";
-import { isDevEnvironment } from "../utils/env";
-import { reloadAfter } from "../utils/misc";
 import { capitalizeFirstLetter } from "../utils/strings";
 import { getOptions } from "../utils/zod";
 import { canSetFunboxWithConfig } from "./funbox-validation";
@@ -1292,34 +1290,6 @@ export const configMetadata: ConfigMetadataObject = {
     displayString: "monkey power level",
     changeRequiresRestart: false,
     group: "hidden",
-  },
-
-  // ads
-  ads: {
-    key: "ads",
-    fa: { icon: "fa-ad" },
-    changeRequiresRestart: false,
-    description: `You can disable or enable ads at any time. "Result" will show one ad on the result page, "on" will add floating vertical banners, and "sellout" will add multiple ads on every page.`,
-    group: "ads",
-    overrideValue: ({ value }) => {
-      if (isDevEnvironment()) {
-        return "off";
-      }
-      return value;
-    },
-    isBlocked: ({ value }) => {
-      if (value !== "off" && isDevEnvironment()) {
-        showNoticeNotification("Ads are disabled in development mode.");
-        return true;
-      }
-      return false;
-    },
-    afterSet: ({ nosave }) => {
-      if (!nosave && !isDevEnvironment()) {
-        reloadAfter(3);
-        showNoticeNotification("Ad settings changed. Refreshing...");
-      }
-    },
   },
 };
 

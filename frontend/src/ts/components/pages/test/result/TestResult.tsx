@@ -2,7 +2,6 @@ import { Link } from "@tanstack/solid-router";
 import { format } from "date-fns/format";
 import { createMemo, JSXElement, onCleanup, onMount, Show } from "solid-js";
 
-import { getConfig } from "../../../../config/store";
 import { useRefWithUtils } from "../../../../hooks/useRefWithUtils";
 import { getIsScreenshotting, isAuthenticated } from "../../../../states/core";
 import { getGlarsesMode } from "../../../../states/glarses-mode";
@@ -94,7 +93,6 @@ export function TestResult(): JSXElement {
           </div>
         )}
       </Show>
-      <ResultAds />
     </div>
   );
 }
@@ -152,34 +150,5 @@ function Watermark(): JSXElement {
         );
       }}
     </Show>
-  );
-}
-
-/**
- * Ad slots are filled and removed by the ad controllers, so the markup must stay static.
- */
-function ResultAds(): JSXElement {
-  return (
-    <div
-      class={cn("full-width mt-4", {
-        hidden: getIsScreenshotting() || getConfig.ads === "off",
-      })}
-    >
-      <div id="ad-result-wrapper" class="ad full-width advertisement ad-h">
-        <div class="iconAndText">
-          <div class="icon">
-            <Fa icon="fa-ad" />
-          </div>
-          <div class="text textRight"></div>
-        </div>
-        <div id="ad-result"></div>
-      </div>
-      <div id="ad-result-small-wrapper" class="ad advertisement ad-h-s">
-        <div class="icon small">
-          <Fa icon="fa-ad" />
-        </div>
-        <div id="ad-result-small"></div>
-      </div>
-    </div>
   );
 }

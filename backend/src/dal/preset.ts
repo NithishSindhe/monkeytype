@@ -1,8 +1,13 @@
 import MonkeyError from "../utils/error";
 import { getDb } from "../init/sql";
 import { EditPresetRequest, Preset } from "@monkeytype/schemas/presets";
-import { ConfigGroupName, PartialConfig } from "@monkeytype/schemas/configs";
+import {
+  ConfigGroupName,
+  ConfigGroupNameSchema,
+  PartialConfig,
+} from "@monkeytype/schemas/configs";
 import { isUuid } from "../utils/misc";
+import { stripRemovedConfigKeys } from "./config";
 
 const MAX_PRESETS = 10;
 
@@ -25,8 +30,12 @@ function toPreset(row: PresetRow): DBConfigPreset {
     _id: row.id,
     uid: row.uid,
     name: row.name,
-    config: row.config,
-    settingGroups: row.setting_groups,
+    config: stripRemovedConfigKeys(row.config),
+    // "ads" was a removed setting group, old rows may still contain it
+    settingGroups:
+      row.setting_groups?.filter((group) =>
+        (ConfigGroupNameSchema.options as string[]).includes(group),
+      ) ?? null,
   };
 }
 
