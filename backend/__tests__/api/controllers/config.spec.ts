@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { setup } from "../../__testData__/controller-test";
 import * as ConfigDal from "../../../src/dal/config";
-import { ObjectId } from "mongodb";
 
 const { mockApp, uid } = setup();
 
@@ -16,7 +15,6 @@ describe("ConfigController", () => {
     it("should get the users config", async () => {
       //GIVEN
       getConfigMock.mockResolvedValue({
-        _id: new ObjectId(),
         uid: uid,
         config: { language: "english" },
       });

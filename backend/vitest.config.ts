@@ -16,7 +16,6 @@ export const projects: UserWorkspaceConfig[] = [
     test: {
       name: { label: "integration", color: "yellow" },
       setupFiles: ["__tests__/__integration__/setup-integration-tests.ts"],
-      globalSetup: "__tests__/__integration__/global-setup.ts",
       include: ["__tests__/__integration__/**/*.spec.ts"],
 
       sequence: {

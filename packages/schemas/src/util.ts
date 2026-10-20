@@ -31,7 +31,8 @@ export const nameWithSeparators = (): ZodString =>
       "Separators cannot be at the start or end, or appear multiple times in a row",
     );
 
-export const IdSchema = token();
+// Row ids are uuids, which contain hyphens, so they do not fit token().
+export const IdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/);
 export type Id = z.infer<typeof IdSchema>;
 
 export const TagSchema = token().max(50);

@@ -601,7 +601,9 @@ export async function incrementTestActivity(
       array[${year}, ${dayIndex.toString()}],
       to_jsonb(
         coalesce(
-          (test_activity->${year}->>${dayIndex.toString()})::int,
+          -- the day is an array index, so it has to be read with an integer
+          -- key. A text key on a json array always yields null.
+          (test_activity->${year}->>${dayIndex}::int)::int,
           0
         ) + 1
       ),
@@ -812,8 +814,8 @@ export async function recordAutoBanEvent(
   const sql = getDb();
   await sql`
     update users set
-      auto_ban_timestamps = ${recentAutoBanTimestamps},
-      banned = ${banned ? true : null} is not null or banned
+      auto_ban_timestamps = ${recentAutoBanTimestamps}::bigint[],
+      banned = banned or ${banned}
     where uid = ${uid}
   `;
 

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as AuthUtils from "../../src/utils/auth";
 import * as Auth from "../../src/middlewares/auth";
-import { DecodedIdToken } from "firebase-admin/auth";
 import { NextFunction, Request, Response } from "express";
 import { getCachedConfiguration } from "../../src/init/configuration";
 import MonkeyError from "../../src/utils/error";
@@ -16,13 +15,13 @@ import { TsRestRequestWithContext } from "../../src/api/types";
 import { enableMonkeyErrorExpects } from "../__testData__/monkey-error";
 
 enableMonkeyErrorExpects();
-const mockDecodedToken: DecodedIdToken = {
+const mockDecodedToken: AuthUtils.DecodedClerkToken = {
   uid: "123456789",
   email: "newuser@mail.com",
-  iat: 0,
-} as DecodedIdToken;
+  issuedAt: 0,
+};
 
-vi.spyOn(AuthUtils, "verifyIdToken").mockResolvedValue(mockDecodedToken);
+vi.spyOn(AuthUtils, "verifySessionToken").mockResolvedValue(mockDecodedToken);
 
 const isDevModeMock = vi.spyOn(Misc, "isDevEnvironment");
 let mockRequest: Partial<TsRestRequestWithContext>;

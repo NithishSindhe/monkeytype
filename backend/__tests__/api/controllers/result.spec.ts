@@ -3,7 +3,7 @@ import { setup } from "../../__testData__/controller-test";
 import * as Configuration from "../../../src/init/configuration";
 import * as ResultDal from "../../../src/dal/result";
 import * as UserDal from "../../../src/dal/user";
-import { ObjectId } from "mongodb";
+import { randomUUID } from "crypto";
 import { enableRateLimitExpects } from "../../__testData__/rate-limit";
 import { DBResult } from "../../../src/utils/result";
 import { omit } from "../../../src/utils/misc";
@@ -44,8 +44,8 @@ describe("result controller test", () => {
 
       expect(body.message).toEqual("Results retrieved");
       expect(body.data).toEqual([
-        { ...resultOne, _id: resultOne._id.toHexString() },
-        { ...resultTwo, _id: resultTwo._id.toHexString() },
+        { ...resultOne, _id: resultOne._id },
+        { ...resultTwo, _id: resultTwo._id },
       ]);
     });
     it("should get latest 1000 results for regular user", async () => {
@@ -284,7 +284,7 @@ describe("result controller test", () => {
 
       //THEN
       expect(body.message).toEqual("Result retrieved");
-      expect(body.data).toEqual({ ...result, _id: result._id.toHexString() });
+      expect(body.data).toEqual({ ...result, _id: result._id });
     });
   });
   describe("getLastResult", () => {
@@ -308,7 +308,7 @@ describe("result controller test", () => {
 
       //THEN
       expect(body.message).toEqual("Result retrieved");
-      expect(body.data).toEqual({ ...result, _id: result._id.toHexString() });
+      expect(body.data).toEqual({ ...result, _id: result._id });
     });
   });
   describe("updateTags", () => {
@@ -329,11 +329,8 @@ describe("result controller test", () => {
     it("should update tags", async () => {
       //GIVEN
       const result = givenDbResult(uid);
-      const resultIdString = result._id.toHexString();
-      const tagIds = [
-        new ObjectId().toHexString(),
-        new ObjectId().toHexString(),
-      ];
+      const resultIdString = result._id;
+      const tagIds = [randomUUID(), randomUUID()];
       const partialUser = { tags: [] };
       getResultMock.mockResolvedValue(result);
       updateTagsMock.mockResolvedValue({} as any);
@@ -372,11 +369,8 @@ describe("result controller test", () => {
         "numbers",
       ]);
 
-      const resultIdString = result._id.toHexString();
-      const tagIds = [
-        new ObjectId().toHexString(),
-        new ObjectId().toHexString(),
-      ];
+      const resultIdString = result._id;
+      const tagIds = [randomUUID(), randomUUID()];
       const partialUser = { tags: [] };
       getResultMock.mockResolvedValue(partialResult);
       updateTagsMock.mockResolvedValue({} as any);
@@ -450,13 +444,17 @@ describe("result controller test", () => {
   });
   describe("addResult", () => {
     //TODO improve test coverage for addResult
-    const insertedId = new ObjectId();
+    const insertedId = randomUUID();
     const userGetMock = vi.spyOn(UserDal, "getUser");
     const userUpdateStreakMock = vi.spyOn(UserDal, "updateStreak");
     const userCheckIfTagPbMock = vi.spyOn(UserDal, "checkIfTagPb");
     const userCheckIfPbMock = vi.spyOn(UserDal, "checkIfPb");
     const userIncrementXpMock = vi.spyOn(UserDal, "incrementXp");
     const userUpdateTypingStatsMock = vi.spyOn(UserDal, "updateTypingStats");
+    const userIncrementTestActivityMock = vi.spyOn(
+      UserDal,
+      "incrementTestActivity",
+    );
     const resultAddMock = vi.spyOn(ResultDal, "addResult");
     const resultGetLastTimestampMock = vi.spyOn(
       ResultDal,
@@ -474,6 +472,7 @@ describe("result controller test", () => {
         userCheckIfPbMock,
         userIncrementXpMock,
         userUpdateTypingStatsMock,
+        userIncrementTestActivityMock,
         resultAddMock,
         resultGetLastTimestampMock,
       ].forEach((it) => it.mockClear());
@@ -486,6 +485,7 @@ describe("result controller test", () => {
       //a prior result exists so incomplete-test time is credited (not zeroed)
       resultGetLastTimestampMock.mockResolvedValue(0);
       userIncrementXpMock.mockResolvedValue();
+      userIncrementTestActivityMock.mockResolvedValue();
     });
 
     it("should add result", async () => {
@@ -518,7 +518,7 @@ describe("result controller test", () => {
           daily: 0,
         },
         streak: 0,
-        insertedId: insertedId.toHexString(),
+        insertedId: insertedId,
       });
 
       expect(resultAddMock).toHaveBeenCalledWith(
@@ -707,7 +707,7 @@ async function enablePremiumFeatures(enabled: boolean): Promise<void> {
 }
 function givenDbResult(uid: string, customize?: Partial<DBResult>): DBResult {
   return {
-    _id: new ObjectId(),
+    _id: randomUUID(),
     wpm: Math.random() * 100,
     rawWpm: Math.random() * 100,
     charStats: [

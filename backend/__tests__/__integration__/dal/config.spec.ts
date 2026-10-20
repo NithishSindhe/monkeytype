@@ -1,42 +1,95 @@
-import { ObjectId } from "mongodb";
 import { describe, expect, it } from "vitest";
 import * as ConfigDal from "../../../src/dal/config";
+import * as UserTestData from "../../__testData__/users";
 
-const getConfigCollection = ConfigDal.__testing.getConfigCollection;
+async function givenUid(): Promise<string> {
+  //configs reference users, so the user has to exist first
+  return (await UserTestData.createUser()).uid;
+}
 
 describe("ConfigDal", () => {
   describe("saveConfig", () => {
-    it("should save and update user configuration correctly", async () => {
+    it("should insert the config when the user has none", async () => {
       //GIVEN
-      const uid = new ObjectId().toString();
-      await getConfigCollection().insertOne({
-        uid,
-        config: {
-          ads: "on",
-          time: 60,
-          quickTab: true, //legacy value
-        },
-      } as any);
+      const uid = await givenUid();
 
       //WHEN
-      await ConfigDal.saveConfig(uid, {
-        ads: "on",
+      await ConfigDal.saveConfig(uid, { ads: "on", time: 60 });
+
+      //THEN
+      const saved = await ConfigDal.getConfig(uid);
+      expect(saved).toEqual({ uid, config: { ads: "on", time: 60 } });
+    });
+
+    it("should merge into the existing config instead of replacing it", async () => {
+      //GIVEN
+      const uid = await givenUid();
+      await ConfigDal.saveConfig(uid, { ads: "on", time: 60 });
+
+      //WHEN
+      await ConfigDal.saveConfig(uid, { ads: "off", difficulty: "normal" });
+
+      //THEN
+      const saved = await ConfigDal.getConfig(uid);
+      expect(saved?.config).toEqual({
+        ads: "off",
+        time: 60,
         difficulty: "normal",
-      } as any);
+      });
+    });
+
+    it("should keep the configs of other users untouched", async () => {
+      //GIVEN
+      const uid = await givenUid();
+      const decoyUid = await givenUid();
+      await ConfigDal.saveConfig(decoyUid, { ads: "on" });
 
       //WHEN
       await ConfigDal.saveConfig(uid, { ads: "off" });
 
       //THEN
-      const savedConfig = (await ConfigDal.getConfig(
-        uid,
-      )) as ConfigDal.DBConfig;
+      expect((await ConfigDal.getConfig(decoyUid))?.config).toEqual({
+        ads: "on",
+      });
+    });
+  });
 
-      expect(savedConfig.config.ads).toBe("off");
-      expect(savedConfig.config.time).toBe(60);
+  describe("getConfig", () => {
+    it("should return null for a user without a config", async () => {
+      //GIVEN
+      const uid = await givenUid();
 
-      //should remove legacy values
-      expect((savedConfig.config as any)["quickTab"]).toBeUndefined();
+      //WHEN / THEN
+      expect(await ConfigDal.getConfig(uid)).toBeNull();
+    });
+
+    it("should return null for an unknown user", async () => {
+      expect(await ConfigDal.getConfig("non existing uid")).toBeNull();
+    });
+  });
+
+  describe("deleteConfig", () => {
+    it("should delete the config of the user", async () => {
+      //GIVEN
+      const uid = await givenUid();
+      const decoyUid = await givenUid();
+      await ConfigDal.saveConfig(uid, { ads: "on" });
+      await ConfigDal.saveConfig(decoyUid, { ads: "on" });
+
+      //WHEN
+      await ConfigDal.deleteConfig(uid);
+
+      //THEN
+      expect(await ConfigDal.getConfig(uid)).toBeNull();
+      expect(await ConfigDal.getConfig(decoyUid)).not.toBeNull();
+    });
+
+    it("should not fail if the user has no config", async () => {
+      //GIVEN
+      const uid = await givenUid();
+
+      //WHEN / THEN
+      await expect(ConfigDal.deleteConfig(uid)).resolves.toBeUndefined();
     });
   });
 });

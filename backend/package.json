@@ -46,6 +46,7 @@
     "zod": "3.23.8"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
     "@monkeytype/oxlint-config": "workspace:*",
     "@monkeytype/typescript-config": "workspace:*",
     "@types/cors": "2.8.19",
@@ -63,7 +64,6 @@
     "oxlint-tsgolint": "7.0.2004",
     "readline-sync": "1.4.10",
     "supertest": "7.1.4",
-    "testcontainers": "11.11.0",
     "tsx": "4.21.0",
     "typescript": "7.0.2",
     "vitest": "4.1.0",

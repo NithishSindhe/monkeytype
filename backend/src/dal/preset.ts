@@ -79,10 +79,17 @@ export async function editPreset(
     preset.config === null ||
     Object.keys(preset.config).length === 0;
 
+  // an explicit null clears the setting groups, a missing key leaves them alone
+  const keepSettingGroups = preset.settingGroups === undefined;
+
   if (keepConfig) {
     await sql`
       update presets
-      set name = ${preset.name}, setting_groups = ${preset.settingGroups ?? null}
+      set name = ${preset.name},
+          setting_groups = case when ${keepSettingGroups}
+            then setting_groups
+            else ${preset.settingGroups ?? null}::text[]
+          end
       where id = ${preset._id} and uid = ${uid}
     `;
     return;
@@ -91,7 +98,10 @@ export async function editPreset(
   await sql`
     update presets set
       name = ${preset.name},
-      setting_groups = ${preset.settingGroups ?? null},
+      setting_groups = case when ${keepSettingGroups}
+        then setting_groups
+        else ${preset.settingGroups ?? null}::text[]
+      end,
       config = ${JSON.stringify(preset.config)}::jsonb
     where id = ${preset._id} and uid = ${uid}
   `;

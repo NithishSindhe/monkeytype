@@ -1,6 +1,6 @@
 import { expect, vi } from "vitest";
-import { DecodedIdToken } from "firebase-admin/auth";
 import * as AuthUtils from "../../src/utils/auth";
+import type { DecodedClerkToken } from "../../src/utils/auth";
 
 export type BearerAuthenticationMock = {
   /**
@@ -19,35 +19,35 @@ export type BearerAuthenticationMock = {
    * modify the token returned by the mock. This can be used to e.g. return a stale token.
    * @param customize
    */
-  modifyToken: (customize: Partial<DecodedIdToken>) => void;
+  modifyToken: (customize: Partial<DecodedClerkToken>) => void;
 };
 export function mockBearerAuthentication(
   uid: string,
 ): BearerAuthenticationMock {
-  const mockDecodedToken = {
+  const mockDecodedToken: DecodedClerkToken = {
     uid,
     email: "newuser@mail.com",
-    iat: Date.now(),
-  } as DecodedIdToken;
-  const verifyIdTokenMock = vi.spyOn(AuthUtils, "verifyIdToken");
+    issuedAt: Date.now(),
+  };
+  const verifySessionTokenMock = vi.spyOn(AuthUtils, "verifySessionToken");
 
   return {
     beforeEach: (): void => {
-      verifyIdTokenMock.mockClear();
-      verifyIdTokenMock.mockResolvedValue(mockDecodedToken);
+      verifySessionTokenMock.mockClear();
+      verifySessionTokenMock.mockResolvedValue(mockDecodedToken);
     },
 
     noAuth: (): void => {
-      verifyIdTokenMock.mockClear();
+      verifySessionTokenMock.mockClear();
     },
 
     expectToHaveBeenCalled: (): void => {
-      expect(verifyIdTokenMock).toHaveBeenCalled();
+      expect(verifySessionTokenMock).toHaveBeenCalled();
     },
 
-    modifyToken: (customize: Partial<DecodedIdToken>): void => {
-      verifyIdTokenMock.mockClear();
-      verifyIdTokenMock.mockResolvedValue({
+    modifyToken: (customize: Partial<DecodedClerkToken>): void => {
+      verifySessionTokenMock.mockClear();
+      verifySessionTokenMock.mockResolvedValue({
         ...mockDecodedToken,
         ...customize,
       });

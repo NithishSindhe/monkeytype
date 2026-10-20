@@ -16,124 +16,77 @@ import * as AuthUtils from "../../../src/utils/auth";
 import * as PresetDal from "../../../src/dal/preset";
 import * as ConfigDal from "../../../src/dal/config";
 import * as ResultDal from "../../../src/dal/result";
-import * as Captcha from "../../../src/utils/captcha";
-import { ObjectId } from "mongodb";
+import { randomUUID } from "crypto";
 import { PersonalBest } from "@monkeytype/schemas/shared";
 import { UserStreak } from "@monkeytype/schemas/users";
-import { isFirebaseError } from "../../../src/utils/error";
 import { pb } from "../../__testData__/users";
 
-const { mockApp, uid, mockAuth } = setup();
+const { mockApp, uid } = setup();
 const configuration = Configuration.getCachedConfiguration();
 
 describe("user controller test", () => {
   describe("user signup", () => {
-    const firebaseDeleteUserMock = vi.spyOn(AuthUtils, "deleteUser");
+    const addUserMock = vi.spyOn(UserDal, "addUser");
     const usernameAvailableMock = vi.spyOn(UserDal, "isNameAvailable");
-    const verifyCaptchaMock = vi.spyOn(Captcha, "verify");
+    const getUserEmailMock = vi.spyOn(AuthUtils, "getUserEmail");
+
     beforeEach(async () => {
       await enableSignup(true);
-      usernameAvailableMock.mockResolvedValue(true);
-    });
-    afterEach(() => {
-      [firebaseDeleteUserMock, usernameAvailableMock].forEach((it) =>
+      [addUserMock, usernameAvailableMock, getUserEmailMock].forEach((it) =>
         it.mockClear(),
       );
+      usernameAvailableMock.mockResolvedValue(true);
+      getUserEmailMock.mockResolvedValue("newuser@mail.com");
+      addUserMock.mockResolvedValue();
     });
 
-    it("should fail if domain is blacklisted", async () => {
-      for (const domain of ["tidal.lol", "selfbot.cc"]) {
-        //GIVEN
-        firebaseDeleteUserMock.mockResolvedValue();
-        mockAuth.modifyToken({
-          email: `newuser@${domain}`,
-        });
+    it("should create the user with the email from clerk", async () => {
+      //WHEN
+      const { body } = await mockApp
+        .post("/users/signup")
+        .set("Authorization", `Bearer ${uid}`)
+        .send({ name: "NewUser" })
+        .expect(200);
 
-        const newUser = {
-          name: "NewUser",
-          uid: uid,
-          email: `newuser@${domain}`,
-          captcha: "captcha",
-        };
-
-        //WHEN
-        const result = await mockApp
-          .post("/users/signup")
-          .set("Authorization", `Bearer ${uid}`)
-          .send(newUser)
-          .set({
-            Accept: "application/json",
-          })
-          .expect(400);
-
-        //THEN
-        expect(result.body.message).toEqual("Invalid domain");
-
-        //user will be created in firebase from the frontend, make sure we remove it
-        expect(firebaseDeleteUserMock).toHaveBeenCalledWith(uid);
-      }
+      //THEN
+      expect(body.message).toEqual("User created");
+      expect(usernameAvailableMock).toHaveBeenCalledWith("NewUser", uid);
+      // the account is shared across apps, the email is never sent by the client
+      expect(getUserEmailMock).toHaveBeenCalledWith(uid);
+      expect(addUserMock).toHaveBeenCalledWith(
+        "NewUser",
+        "newuser@mail.com",
+        uid,
+      );
     });
 
     it("should fail if username is taken", async () => {
       //GIVEN
       usernameAvailableMock.mockResolvedValue(false);
-      firebaseDeleteUserMock.mockResolvedValue();
-
-      const newUser = {
-        name: "NewUser",
-        uid: uid,
-        email: "newuser@mail.com",
-        captcha: "captcha",
-      };
 
       //WHEN
       const result = await mockApp
         .post("/users/signup")
         .set("Authorization", `Bearer ${uid}`)
-        .send(newUser)
+        .send({ name: "NewUser" })
         .expect(409);
 
       //THEN
       expect(result.body.message).toEqual("Username unavailable");
       expect(usernameAvailableMock).toHaveBeenCalledWith("NewUser", uid);
-
-      //user will be created in firebase from the frontend, make sure we remove it
-      expect(firebaseDeleteUserMock).toHaveBeenCalledWith(uid);
+      expect(addUserMock).not.toHaveBeenCalled();
     });
-    it("should fail if capture is invalid", async () => {
-      //GIVEN
-      verifyCaptchaMock.mockResolvedValue(false);
 
-      const newUser = {
-        name: "NewUser",
-        uid: uid,
-        email: "newuser@mail.com",
-        captcha: "captcha",
-      };
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/signup")
-        .set("Authorization", `Bearer ${uid}`)
-        .send(newUser)
-        .expect(422);
-
-      //THEN
-      expect(body.message).toEqual("Captcha challenge failed");
+    it("should fail without authentication", async () => {
+      await mockApp.post("/users/signup").send({ name: "NewUser" }).expect(401);
     });
+
     it("should fail if username too long", async () => {
-      //GIVEN
-      const newUser = {
-        uid: uid,
-        email: "newuser@mail.com",
-        captcha: "captcha",
-      };
-
       //WHEN
       const { body } = await mockApp
         .post("/users/signup")
         .set("Authorization", `Bearer ${uid}`)
-        .send({ ...newUser, name: new Array(17).fill("x").join("") })
+        .send({ name: new Array(17).fill("x").join("") })
         .expect(422);
 
       //THEN
@@ -144,19 +97,13 @@ describe("user controller test", () => {
         ],
       });
     });
-    it("should fail if username contains disallowed word", async () => {
-      //GIVEN
-      const newUser = {
-        uid: uid,
-        email: "newuser@mail.com",
-        captcha: "captcha",
-      };
 
+    it("should fail if username contains disallowed word", async () => {
       //WHEN
       const { body } = await mockApp
         .post("/users/signup")
         .set("Authorization", `Bearer ${uid}`)
-        .send({ ...newUser, name: "miodec" })
+        .send({ name: "miodec" })
         .expect(422);
 
       //THEN
@@ -165,6 +112,22 @@ describe("user controller test", () => {
         validationErrors: [
           '"name" Disallowed word detected. Please remove it. If you believe this is a mistake, please contact us (miodec).',
         ],
+      });
+    });
+
+    it("should fail with unknown properties", async () => {
+      //the request body only carries the name, the uid and email come from the
+      //session and from clerk
+      const { body } = await mockApp
+        .post("/users/signup")
+        .set("Authorization", `Bearer ${uid}`)
+        .send({ name: "NewUser", email: "newuser@mail.com", captcha: "c" })
+        .expect(422);
+
+      //THEN
+      expect(body).toEqual({
+        message: "Invalid request data schema",
+        validationErrors: ["Unrecognized key(s) in object: 'email', 'captcha'"],
       });
     });
   });
@@ -344,14 +307,14 @@ describe("user controller test", () => {
   });
   describe("delete user ", () => {
     const deleteUserMock = vi.spyOn(UserDal, "deleteUser");
-    const firebaseDeleteUserMock = vi.spyOn(AuthUtils, "deleteUser");
+    const clerkDeleteUserMock = vi.spyOn(AuthUtils, "deleteUser");
     const deleteAllPresetsMock = vi.spyOn(PresetDal, "deleteAllPresets");
     const deleteConfigMock = vi.spyOn(ConfigDal, "deleteConfig");
     const deleteAllResultMock = vi.spyOn(ResultDal, "deleteAll");
 
     beforeEach(() => {
       [
-        firebaseDeleteUserMock,
+        clerkDeleteUserMock,
         deleteUserMock,
         deleteAllPresetsMock,
         deleteConfigMock,
@@ -363,14 +326,14 @@ describe("user controller test", () => {
     afterEach(() => {
       [
         deleteUserMock,
-        firebaseDeleteUserMock,
+        clerkDeleteUserMock,
         deleteConfigMock,
         deleteAllResultMock,
         deleteAllPresetsMock,
       ].forEach((it) => it.mockClear());
     });
 
-    it("should delete user", async () => {
+    it("should delete all monkeytype data of the user", async () => {
       //WHEN
       await mockApp
         .delete("/users/")
@@ -379,20 +342,13 @@ describe("user controller test", () => {
 
       //THEN
       expect(deleteUserMock).toHaveBeenCalledWith(uid);
-      expect(firebaseDeleteUserMock).toHaveBeenCalledWith(uid);
       expect(deleteAllPresetsMock).toHaveBeenCalledWith(uid);
       expect(deleteConfigMock).toHaveBeenCalledWith(uid);
       expect(deleteAllResultMock).toHaveBeenCalledWith(uid);
     });
 
-    it("should not fail if firebase user cannot be found", async () => {
-      //GIVEN
-      firebaseDeleteUserMock.mockRejectedValue({
-        code: "user-not-found",
-        codePrefix: "auth",
-        errorInfo: { code: "auth/user-not-found", message: "user not found" },
-      });
-
+    it("should leave the clerk account alone", async () => {
+      //the account is shared with the other apps, so it must survive
       //WHEN
       await mockApp
         .delete("/users/")
@@ -400,30 +356,18 @@ describe("user controller test", () => {
         .expect(200);
 
       //THEN
-      expect(deleteUserMock).toHaveBeenCalledWith(uid);
-      expect(firebaseDeleteUserMock).toHaveBeenCalledWith(uid);
-      expect(deleteAllPresetsMock).toHaveBeenCalledWith(uid);
-      expect(deleteConfigMock).toHaveBeenCalledWith(uid);
-      expect(deleteAllResultMock).toHaveBeenCalledWith(uid);
+      expect(clerkDeleteUserMock).not.toHaveBeenCalled();
     });
 
-    it("should fail for unknown error from firebase", async () => {
+    it("should fail if the data could not be deleted", async () => {
       //GIVEN
-      firebaseDeleteUserMock.mockRejectedValue({
-        code: "unknown",
-        codePrefix: "auth",
-        errorInfo: { code: "auth/unknown", message: "unknown" },
-      });
+      deleteUserMock.mockRejectedValue(new Error("connection lost"));
 
-      //WHEN
+      //WHEN / THEN
       await mockApp
         .delete("/users/")
         .set("Authorization", `Bearer ${uid}`)
         .expect(500);
-
-      //THEN
-      expect(deleteUserMock).toHaveBeenCalledWith(uid);
-      expect(firebaseDeleteUserMock).toHaveBeenCalledWith(uid);
     });
   });
   describe("resetUser", () => {
@@ -635,289 +579,6 @@ describe("user controller test", () => {
       expect(clearPbMock).toHaveBeenCalledWith(uid);
     });
   });
-  describe("update email", () => {
-    const authUpdateEmailMock = vi.spyOn(AuthUtils, "updateUserEmail");
-    const userUpdateEmailMock = vi.spyOn(UserDal, "updateEmail");
-
-    beforeEach(() => {
-      [authUpdateEmailMock, userUpdateEmailMock].forEach((it) =>
-        it.mockClear().mockResolvedValue(null as never),
-      );
-    });
-    it("should update users email", async () => {
-      //GIVEN
-      const newEmail = "newEmail@example.com";
-
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/email")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({ newEmail, previousEmail: "previousEmail@example.com" })
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Email updated",
-        data: null,
-      });
-
-      expect(authUpdateEmailMock).toHaveBeenCalledWith(
-        uid,
-        newEmail.toLowerCase(),
-      );
-      expect(userUpdateEmailMock).toHaveBeenCalledWith(
-        uid,
-        newEmail.toLowerCase(),
-      );
-    });
-    it("should fail for duplicate email", async () => {
-      //GIVEN
-      const mockFirebaseError = {
-        code: "auth/email-already-exists",
-        codePrefix: "auth",
-        errorInfo: {
-          code: "auth/email-already-exists",
-          message: "Email already exists",
-        },
-      };
-      authUpdateEmailMock.mockRejectedValue(mockFirebaseError);
-      expect(isFirebaseError(mockFirebaseError)).toBe(true);
-
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/email")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          newEmail: "newEmail@example.com",
-          previousEmail: "previousEmail@example.com",
-        })
-        .expect(409);
-
-      expect(body.message).toEqual(
-        "The email address is already in use by another account",
-      );
-
-      expect(userUpdateEmailMock).not.toHaveBeenCalled();
-    });
-
-    it("should fail for invalid email", async () => {
-      //GIVEN
-      const mockFirebaseError = {
-        code: "auth/invalid-email",
-        codePrefix: "auth",
-        errorInfo: {
-          code: "auth/invalid-email",
-          message: "Invalid email",
-        },
-      };
-      authUpdateEmailMock.mockRejectedValue(mockFirebaseError);
-      expect(isFirebaseError(mockFirebaseError)).toBe(true);
-
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/email")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          newEmail: "newEmail@example.com",
-          previousEmail: "previousEmail@example.com",
-        })
-        .expect(400);
-
-      expect(body.message).toEqual("Invalid email address");
-
-      expect(userUpdateEmailMock).not.toHaveBeenCalled();
-    });
-    it("should fail for too many requests", async () => {
-      //GIVEN
-      const mockFirebaseError = {
-        code: "auth/too-many-requests",
-        codePrefix: "auth",
-        errorInfo: {
-          code: "auth/too-many-requests",
-          message: "Too many requests",
-        },
-      };
-      authUpdateEmailMock.mockRejectedValue(mockFirebaseError);
-      expect(isFirebaseError(mockFirebaseError)).toBe(true);
-
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/email")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          newEmail: "newEmail@example.com",
-          previousEmail: "previousEmail@example.com",
-        })
-        .expect(429);
-
-      expect(body.message).toEqual("Too many requests. Please try again later");
-
-      expect(userUpdateEmailMock).not.toHaveBeenCalled();
-    });
-    it("should fail for unknown user", async () => {
-      //GIVEN
-      const mockFirebaseError = {
-        code: "auth/user-not-found",
-        codePrefix: "auth",
-        errorInfo: {
-          code: "auth/user-not-found",
-          message: "User not found",
-        },
-      };
-      authUpdateEmailMock.mockRejectedValue(mockFirebaseError);
-      expect(isFirebaseError(mockFirebaseError)).toBe(true);
-
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/email")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          newEmail: "newEmail@example.com",
-          previousEmail: "previousEmail@example.com",
-        })
-        .expect(404);
-
-      expect(body.message).toEqual(
-        "User not found in the auth system\nStack: update email",
-      );
-
-      expect(userUpdateEmailMock).not.toHaveBeenCalled();
-    });
-    it("should fail for invalid user token", async () => {
-      //GIVEN
-      authUpdateEmailMock.mockRejectedValue({
-        code: "auth/invalid-user-token",
-        codePrefix: "auth",
-        errorInfo: {
-          code: "auth/invalid-user-token",
-          message: "Invalid user token",
-        },
-      });
-
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/email")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          newEmail: "newEmail@example.com",
-          previousEmail: "previousEmail@example.com",
-        })
-        .expect(401);
-
-      expect(body.message).toEqual("Invalid user token\nStack: update email");
-
-      expect(userUpdateEmailMock).not.toHaveBeenCalled();
-    });
-    it("should fail for unknown error", async () => {
-      //GIVEN
-      authUpdateEmailMock.mockRejectedValue({});
-
-      //WHEN
-      await mockApp
-        .patch("/users/email")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          newEmail: "newEmail@example.com",
-          previousEmail: "previousEmail@example.com",
-        })
-        .expect(500);
-    });
-    it("should fail without mandatory properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/email")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(422);
-
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: ['"newEmail" Required', '"previousEmail" Required'],
-      });
-    });
-    it("should fail with unknown properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/email")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          newEmail: "newEmail@example.com",
-          previousEmail: "previousEmail@example.com",
-          extra: "value",
-        })
-        .expect(422);
-
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: ["Unrecognized key(s) in object: 'extra'"],
-      });
-    });
-  });
-  describe("update password", () => {
-    const updatePasswordMock = vi.spyOn(AuthUtils, "updateUserPassword");
-
-    beforeEach(() => {
-      updatePasswordMock.mockClear().mockResolvedValue(null as never);
-    });
-
-    it("should update password", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/password")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({ newPassword: "sw0rdf1sh" })
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Password updated",
-        data: null,
-      });
-      expect(updatePasswordMock).toHaveBeenCalledWith(uid, "sw0rdf1sh");
-    });
-    it("should fail without mandatory properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/password")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: ['"newPassword" Required'],
-      });
-    });
-    it("should fail with unknown properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/password")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({ newPassword: "sw0rdf1sh", extra: "value" })
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: ["Unrecognized key(s) in object: 'extra'"],
-      });
-    });
-    it("should fail with password too short", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/password")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({ newPassword: "test" })
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: [
-          '"newPassword" String must contain at least 6 character(s)',
-        ],
-      });
-    });
-  });
   describe("add result filter preset", () => {
     const validPreset = {
       _id: "66c61b7a2a65715e66a0cc95",
@@ -976,7 +637,7 @@ describe("user controller test", () => {
         none: true,
       },
     };
-    const generatedId = new ObjectId();
+    const generatedId = randomUUID();
 
     const addResultFilterPresetMock = vi.spyOn(
       UserDal,
@@ -1000,7 +661,7 @@ describe("user controller test", () => {
       //THEN
       expect(body).toEqual({
         message: "Result filter preset created",
-        data: generatedId.toHexString(),
+        data: generatedId,
       });
 
       expect(addResultFilterPresetMock).toHaveBeenCalledWith(
@@ -1112,7 +773,7 @@ describe("user controller test", () => {
   describe("add tag", () => {
     const addTagMock = vi.spyOn(UserDal, "addTag");
     const newTag = {
-      _id: new ObjectId(),
+      _id: randomUUID(),
       name: "tagName",
       personalBests: {
         time: {},
@@ -1140,7 +801,7 @@ describe("user controller test", () => {
       //THEN
       expect(body).toEqual({
         message: "Tag updated",
-        data: { ...newTag, _id: newTag._id.toHexString() },
+        data: { ...newTag, _id: newTag._id },
       });
       expect(addTagMock).toHaveBeenCalledWith(uid, "tagName");
     });
@@ -1185,7 +846,7 @@ describe("user controller test", () => {
 
     it("should clear tag pb", async () => {
       //GIVEN
-      const tagId = new ObjectId().toHexString();
+      const tagId = randomUUID();
       //WHEN
       const { body } = await mockApp
         .delete(`/users/tags/${tagId}/personalBest`)
@@ -1209,7 +870,7 @@ describe("user controller test", () => {
 
     it("should update tag", async () => {
       //GIVEN
-      const tagId = new ObjectId().toHexString();
+      const tagId = randomUUID();
 
       //WHEN
       const { body } = await mockApp
@@ -1244,7 +905,7 @@ describe("user controller test", () => {
         .patch(`/users/tags`)
         .set("Authorization", `Bearer ${uid}`)
         .send({
-          tagId: new ObjectId().toHexString(),
+          tagId: randomUUID(),
           newName: "newName",
           extra: "value",
         })
@@ -1266,7 +927,7 @@ describe("user controller test", () => {
 
     it("should remove tag", async () => {
       //GIVEN
-      const tagId = new ObjectId().toHexString();
+      const tagId = randomUUID();
 
       //WHEN
       const { body } = await mockApp
@@ -1293,12 +954,12 @@ describe("user controller test", () => {
     it("should get tags", async () => {
       //GIVEN
       const tagOne: UserDal.DBUserTag = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "tagOne",
         personalBests: {} as any,
       };
       const tagTwo: UserDal.DBUserTag = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "tagOne",
         personalBests: {} as any,
       };
@@ -1315,8 +976,8 @@ describe("user controller test", () => {
       expect(body).toEqual({
         message: "Tags retrieved",
         data: [
-          { ...tagOne, _id: tagOne._id.toHexString() },
-          { ...tagTwo, _id: tagTwo._id.toHexString() },
+          { ...tagOne, _id: tagOne._id },
+          { ...tagTwo, _id: tagTwo._id },
         ],
       });
       expect(getTagsMock).toHaveBeenCalledWith(uid);
@@ -1330,12 +991,12 @@ describe("user controller test", () => {
     it("should get custom themes", async () => {
       //GIVEN
       const themeOne: UserDal.DBCustomTheme = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "themeOne",
         colors: new Array(10).fill("#000000") as any,
       };
       const themeTwo: UserDal.DBCustomTheme = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "themeTwo",
         colors: new Array(10).fill("#FFFFFF") as any,
       };
@@ -1351,8 +1012,8 @@ describe("user controller test", () => {
       expect(body).toEqual({
         message: "Custom themes retrieved",
         data: [
-          { ...themeOne, _id: themeOne._id.toHexString() },
-          { ...themeTwo, _id: themeTwo._id.toHexString() },
+          { ...themeOne, _id: themeOne._id },
+          { ...themeTwo, _id: themeTwo._id },
         ],
       });
     });
@@ -1366,7 +1027,7 @@ describe("user controller test", () => {
     it("should add", async () => {
       //GIVEN
       const addedTheme: UserDal.DBCustomTheme = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "custom",
         colors: new Array(10).fill("#000000") as any,
       };
@@ -1385,7 +1046,7 @@ describe("user controller test", () => {
       //THEN
       expect(body).toEqual({
         message: "Custom theme added",
-        data: { ...addedTheme, _id: addedTheme._id.toHexString() },
+        data: { ...addedTheme, _id: addedTheme._id },
       });
       expect(addThemeMock).toHaveBeenCalledWith(uid, {
         name: "customTheme",
@@ -1453,7 +1114,7 @@ describe("user controller test", () => {
 
     it("should remove theme", async () => {
       //GIVEN
-      const themeId = new ObjectId().toHexString();
+      const themeId = randomUUID();
 
       //WHEN
       const { body } = await mockApp
@@ -1487,7 +1148,7 @@ describe("user controller test", () => {
       const { body } = await mockApp
         .delete("/users/customThemes")
         .set("Authorization", `Bearer ${uid}`)
-        .send({ themeId: new ObjectId().toHexString(), extra: "value" })
+        .send({ themeId: randomUUID(), extra: "value" })
         .expect(422);
 
       //THEN
@@ -1505,7 +1166,7 @@ describe("user controller test", () => {
 
     it("should edit custom theme", async () => {
       //GIVEN
-      const themeId = new ObjectId().toHexString();
+      const themeId = randomUUID();
       const theme = {
         name: "newName",
         colors: new Array(10).fill("#000000") as any,
@@ -1547,7 +1208,7 @@ describe("user controller test", () => {
         .patch("/users/customThemes")
         .set("Authorization", `Bearer ${uid}`)
         .send({
-          themeId: new ObjectId().toHexString(),
+          themeId: randomUUID(),
           theme: {
             name: "newName",
             colors: new Array(10).fill("#000000") as any,
@@ -1807,8 +1468,7 @@ describe("user controller test", () => {
     const checkIfUserIsPremiumMock = vi.spyOn(UserDal, "checkIfUserIsPremium");
 
     const foundUser: Partial<UserDal.DBUser> = {
-      _id: new ObjectId(),
-      uid: new ObjectId().toHexString(),
+      uid: randomUUID(),
       name: "bob",
       banned: false,
       inventory: { badges: [{ id: 1, selected: true }, { id: 2 }] },

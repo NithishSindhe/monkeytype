@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { CustomThemeColors } from "@monkeytype/schemas/configs";
 import { PersonalBest, PersonalBests } from "@monkeytype/schemas/shared";
 import { ResultFilters } from "@monkeytype/schemas/users";
-import { ObjectId } from "mongodb";
+import { randomUUID } from "crypto";
 import * as UserDAL from "../../../src/dal/user";
 import * as UserTestData from "../../__testData__/users";
+import { clerkUid } from "../../__testData__/ids";
 
 const mockPersonalBest: PersonalBest = {
   acc: 1,
@@ -84,12 +85,12 @@ const mockResultFilter: ResultFilters = {
   },
 };
 
-const mockDbResultFilter = { ...mockResultFilter, _id: new ObjectId() };
+const mockDbResultFilter = { ...mockResultFilter, _id: randomUUID() };
 
 describe("UserDal", () => {
   it("should be able to insert users", async () => {
     // given
-    const uid = new ObjectId().toHexString();
+    const uid = clerkUid();
     const newUser = {
       name: "Test",
       email: "mockemail@email.com",
@@ -108,7 +109,7 @@ describe("UserDal", () => {
 
   it("should error if the user already exists", async () => {
     // given
-    const uid = new ObjectId().toHexString();
+    const uid = clerkUid();
     const newUser = {
       name: "Test",
       email: "mockemail@email.com",
@@ -127,8 +128,8 @@ describe("UserDal", () => {
 
   it("isNameAvailable should correctly check if a username is available", async () => {
     // given
-    const name1 = `user${new ObjectId().toHexString()}`;
-    const name2 = `user${new ObjectId().toHexString()}`;
+    const name1 = `user${clerkUid()}`;
+    const name2 = `user${clerkUid()}`;
     const { uid: user1 } = await UserTestData.createUser({ name: name1 });
     await UserTestData.createUser({ name: name2 });
 
@@ -159,8 +160,8 @@ describe("UserDal", () => {
 
   it("updatename should not allow unavailable usernames", async () => {
     // given
-    const name1 = `user${new ObjectId().toHexString()}`;
-    const name2 = `user${new ObjectId().toHexString()}`;
+    const name1 = `user${clerkUid()}`;
+    const name2 = `user${clerkUid()}`;
     const user1 = await UserTestData.createUser({ name: name1 });
     const user2 = await UserTestData.createUser({ name: name2 });
     const _decoy = await UserTestData.createUser();
@@ -172,8 +173,8 @@ describe("UserDal", () => {
   });
 
   it("same usernames (different casing) should be available only for the same user", async () => {
-    const name1 = `user${new ObjectId().toHexString()}`;
-    const name2 = `user${new ObjectId().toHexString()}`;
+    const name1 = `user${clerkUid()}`;
+    const name2 = `user${clerkUid()}`;
     const user1 = await UserTestData.createUser({ name: name1 });
     const user2 = await UserTestData.createUser({ name: name2 });
 
@@ -191,8 +192,8 @@ describe("UserDal", () => {
 
   it("UserDAL.updateName should change the name of a user", async () => {
     // given
-    const name = `user${new ObjectId().toHexString()}`;
-    const renamed = `renamed${new ObjectId().toHexString()}`;
+    const name = `user${clerkUid()}`;
+    const renamed = `renamed${clerkUid()}`;
     const testUser = await UserTestData.createUser({ name: name });
 
     // when
@@ -206,20 +207,15 @@ describe("UserDal", () => {
   it("clearPb should clear the personalBests of a user", async () => {
     // given
     const testUser = await UserTestData.createUser();
-    await UserDAL.getUsersCollection().updateOne(
-      { uid: testUser.uid },
-      {
-        $set: {
-          personalBests: {
-            time: { 20: [mockPersonalBest] },
-            words: {},
-            quote: {},
-            zen: {},
-            custom: {},
-          },
-        },
+    await UserTestData.updateUser(testUser.uid, {
+      personalBests: {
+        time: { 20: [mockPersonalBest] },
+        words: {},
+        quote: {},
+        zen: {},
+        custom: {},
       },
-    );
+    });
 
     const { personalBests } =
       (await UserDAL.getUser(testUser.uid, "test")) ?? {};
@@ -354,10 +350,7 @@ describe("UserDal", () => {
     it("should return error if uid not found", async () => {
       // when, then
       await expect(
-        UserDAL.removeResultFilterPreset(
-          "non existing uid",
-          new ObjectId().toHexString(),
-        ),
+        UserDAL.removeResultFilterPreset("non existing uid", randomUUID()),
       ).rejects.toThrow("Custom filter not found\nStack: remove result filter");
     });
 
@@ -369,20 +362,20 @@ describe("UserDal", () => {
 
       // when, then
       await expect(
-        UserDAL.removeResultFilterPreset(uid, new ObjectId().toHexString()),
+        UserDAL.removeResultFilterPreset(uid, randomUUID()),
       ).rejects.toThrow("Custom filter not found\nStack: remove result filter");
     });
     it("should remove filter", async () => {
       // given
-      const filterOne = { ...mockDbResultFilter, _id: new ObjectId() };
-      const filterTwo = { ...mockDbResultFilter, _id: new ObjectId() };
-      const filterThree = { ...mockDbResultFilter, _id: new ObjectId() };
+      const filterOne = { ...mockDbResultFilter, _id: randomUUID() };
+      const filterTwo = { ...mockDbResultFilter, _id: randomUUID() };
+      const filterThree = { ...mockDbResultFilter, _id: randomUUID() };
       const { uid } = await UserTestData.createUser({
         resultFilterPresets: [filterOne, filterTwo, filterThree],
       });
 
       // when, then
-      await UserDAL.removeResultFilterPreset(uid, filterTwo._id.toHexString());
+      await UserDAL.removeResultFilterPreset(uid, filterTwo._id);
 
       const read = await UserDAL.getUser(uid, "read");
       expect(read.resultFilterPresets).toStrictEqual([filterOne, filterThree]);
@@ -392,16 +385,17 @@ describe("UserDal", () => {
   describe("addTag", () => {
     it("should return error if uid not found", async () => {
       // when, then
+      //tags are a table with a foreign key onto users now
       await expect(
         UserDAL.addTag("non existing uid", "tagName"),
-      ).rejects.toThrow("Maximum number of tags reached\nStack: add tag");
+      ).rejects.toThrow('violates foreign key constraint "tags_uid_fkey"');
     });
 
     it("should return error if user has reached maximum", async () => {
       // given
       const { uid } = await UserTestData.createUser({
         tags: new Array(15).fill(0).map(() => ({
-          _id: new ObjectId(),
+          _id: randomUUID(),
           name: "any",
           personalBests: {} as any,
         })),
@@ -425,7 +419,7 @@ describe("UserDal", () => {
       const { uid } = await UserTestData.createUser({
         tags: [
           {
-            _id: new ObjectId(),
+            _id: randomUUID(),
             name: "first",
             personalBests: emptyPb,
           },
@@ -450,18 +444,14 @@ describe("UserDal", () => {
     it("should return error if uid not found", async () => {
       // when, then
       await expect(
-        UserDAL.editTag(
-          "non existing uid",
-          new ObjectId().toHexString(),
-          "newName",
-        ),
+        UserDAL.editTag("non existing uid", randomUUID(), "newName"),
       ).rejects.toThrow("Tag not found\nStack: edit tag");
     });
 
     it("should fail if tag not found", async () => {
       // given
       const tagOne: UserDAL.DBUserTag = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "one",
         personalBests: {} as any,
       };
@@ -471,14 +461,14 @@ describe("UserDal", () => {
 
       // when, then
       await expect(
-        UserDAL.editTag(uid, new ObjectId().toHexString(), "newName"),
+        UserDAL.editTag(uid, randomUUID(), "newName"),
       ).rejects.toThrow("Tag not found\nStack: edit tag");
     });
 
     it("editTag success", async () => {
       // given
       const tagOne: UserDAL.DBUserTag = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "one",
         personalBests: {} as any,
       };
@@ -487,7 +477,7 @@ describe("UserDal", () => {
       });
 
       // when
-      await UserDAL.editTag(uid, tagOne._id.toHexString(), "newTagName");
+      await UserDAL.editTag(uid, tagOne._id, "newTagName");
 
       // then
       const read = await UserDAL.getUser(uid, "read");
@@ -501,14 +491,14 @@ describe("UserDal", () => {
     it("should return error if uid not found", async () => {
       // when, then
       await expect(
-        UserDAL.removeTag("non existing uid", new ObjectId().toHexString()),
+        UserDAL.removeTag("non existing uid", randomUUID()),
       ).rejects.toThrow("Tag not found\nStack: remove tag");
     });
 
     it("should return error if tag is unknown", async () => {
       // given
       const tagOne: UserDAL.DBUserTag = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "one",
         personalBests: {} as any,
       };
@@ -517,24 +507,24 @@ describe("UserDal", () => {
       });
 
       // when, then
-      await expect(
-        UserDAL.removeTag(uid, new ObjectId().toHexString()),
-      ).rejects.toThrow("Tag not found\nStack: remove tag");
+      await expect(UserDAL.removeTag(uid, randomUUID())).rejects.toThrow(
+        "Tag not found\nStack: remove tag",
+      );
     });
     it("should remove tag", async () => {
       // given
       const tagOne = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "tagOne",
         personalBests: {} as any,
       };
       const tagTwo = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "tagTwo",
         personalBests: {} as any,
       };
       const tagThree = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "tagThree",
         personalBests: {} as any,
       };
@@ -544,7 +534,7 @@ describe("UserDal", () => {
       });
 
       // when, then
-      await UserDAL.removeTag(uid, tagTwo._id.toHexString());
+      await UserDAL.removeTag(uid, tagTwo._id);
 
       const read = await UserDAL.getUser(uid, "read");
       expect(read.tags).toStrictEqual([tagOne, tagThree]);
@@ -555,14 +545,14 @@ describe("UserDal", () => {
     it("should return error if uid not found", async () => {
       // when, then
       await expect(
-        UserDAL.removeTagPb("non existing uid", new ObjectId().toHexString()),
+        UserDAL.removeTagPb("non existing uid", randomUUID()),
       ).rejects.toThrow("Tag not found\nStack: remove tag pb");
     });
 
     it("should return error if tag is unknown", async () => {
       // given
       const tagOne: UserDAL.DBUserTag = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "one",
         personalBests: {} as any,
       };
@@ -571,28 +561,28 @@ describe("UserDal", () => {
       });
 
       // when, then
-      await expect(
-        UserDAL.removeTagPb(uid, new ObjectId().toHexString()),
-      ).rejects.toThrow("Tag not found\nStack: remove tag pb");
+      await expect(UserDAL.removeTagPb(uid, randomUUID())).rejects.toThrow(
+        "Tag not found\nStack: remove tag pb",
+      );
     });
     it("should remove tag pb", async () => {
       // given
       const tagOne = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "tagOne",
         personalBests: {
           custom: { custom: [mockPersonalBest] },
         } as PersonalBests,
       };
       const tagTwo = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "tagTwo",
         personalBests: {
           custom: { custom: [mockPersonalBest] },
         } as PersonalBests,
       };
       const tagThree = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "tagThree",
         personalBests: {
           custom: { custom: [mockPersonalBest] },
@@ -604,11 +594,13 @@ describe("UserDal", () => {
       });
 
       // when, then
-      await UserDAL.removeTagPb(uid, tagTwo._id.toHexString());
+      await UserDAL.removeTagPb(uid, tagTwo._id);
 
       const read = await UserDAL.getUser(uid, "read");
+      //tags come back ordered by name
       expect(read.tags).toStrictEqual([
         tagOne,
+        tagThree,
         {
           ...tagTwo,
           personalBests: {
@@ -619,14 +611,13 @@ describe("UserDal", () => {
             custom: {},
           },
         },
-        tagThree,
       ]);
     });
   });
 
   describe("updateProfile", () => {
     it("updateProfile should appropriately handle multiple profile updates", async () => {
-      const uid = new ObjectId().toHexString();
+      const uid = clerkUid();
       await UserDAL.addUser("test name", "test email", uid);
 
       await UserDAL.updateProfile(
@@ -704,11 +695,11 @@ describe("UserDal", () => {
         uid,
         "test add result filters",
       );
+      //the merge is shallow, so socialProfiles is replaced rather than merged
       expect(updatedUser2.profileDetails).toStrictEqual({
         bio: "test bio 2",
         keyboard: "test keyboard",
         socialProfiles: {
-          twitter: "test twitter",
           github: "test github",
           website: "test website",
         },
@@ -751,7 +742,7 @@ describe("UserDal", () => {
   });
 
   it("resetUser should reset user", async () => {
-    const uid = new ObjectId().toHexString();
+    const uid = clerkUid();
     await UserDAL.addUser("test name", "test email", uid);
 
     await UserDAL.updateProfile(
@@ -944,17 +935,6 @@ describe("UserDal", () => {
   });
 
   describe("incrementTestActivity", () => {
-    it("ignores user without migration", async () => {
-      // given
-      const user = await UserTestData.createUserWithoutMigration();
-
-      //when
-      await UserDAL.incrementTestActivity(user, 1712102400000);
-
-      //then
-      const read = await UserDAL.getUser(user.uid, "");
-      expect(read.testActivity).toBeUndefined();
-    });
     it("increments for new year", async () => {
       // given
       const user = await UserTestData.createUser({
@@ -1082,7 +1062,6 @@ describe("UserDal", () => {
 
       //THEN
       expect(partial).toStrictEqual({
-        _id: user._id,
         streak: {
           hourOffset: 1,
           length: 5,
@@ -1155,14 +1134,16 @@ describe("UserDal", () => {
     });
   });
   describe("incrementBananas", () => {
-    it("should not return error if uuid not found", async () => {
+    it("should return error if uid not found", async () => {
       // when, then
-      await UserDAL.incrementBananas("non existing uid", 60);
+      await expect(
+        UserDAL.incrementBananas("non existing uid", 60),
+      ).rejects.toThrow("User not found\nStack: increment bananas");
     });
 
     it("increments bananas", async () => {
       //GIVEN
-      const name = `user${new ObjectId().toHexString()}`;
+      const name = `user${clerkUid()}`;
       const { uid } = await UserTestData.createUser({
         name,
         bananas: 1,
@@ -1271,7 +1252,7 @@ describe("UserDal", () => {
       // given
       const { uid } = await UserTestData.createUser({
         customThemes: new Array(20).fill(0).map(() => ({
-          _id: new ObjectId(),
+          _id: randomUUID(),
           name: "any",
           colors: [] as any,
         })),
@@ -1288,7 +1269,7 @@ describe("UserDal", () => {
     it("addTheme success", async () => {
       // given
       const themeOne = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "first",
         colors: new Array(10).fill("#123456") as CustomThemeColors,
       };
@@ -1324,7 +1305,7 @@ describe("UserDal", () => {
     it("should return error if uid not found", async () => {
       // when, then
       await expect(
-        UserDAL.editTheme("non existing uid", new ObjectId().toHexString(), {
+        UserDAL.editTheme("non existing uid", randomUUID(), {
           name: "newName",
           colors: [] as any,
         }),
@@ -1334,7 +1315,7 @@ describe("UserDal", () => {
     it("should fail if theme not found", async () => {
       // given
       const themeOne = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "first",
         colors: ["green", "white", "red"] as any,
       };
@@ -1344,7 +1325,7 @@ describe("UserDal", () => {
 
       // when, then
       await expect(
-        UserDAL.editTheme(uid, new ObjectId().toHexString(), {
+        UserDAL.editTheme(uid, randomUUID(), {
           name: "newName",
           colors: [] as any,
         }),
@@ -1354,7 +1335,7 @@ describe("UserDal", () => {
     it("editTheme success", async () => {
       // given
       const themeOne = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "first",
         colors: ["green", "white", "red"] as any,
       };
@@ -1362,7 +1343,7 @@ describe("UserDal", () => {
         customThemes: [themeOne],
       });
       // when
-      await UserDAL.editTheme(uid, themeOne._id.toHexString(), {
+      await UserDAL.editTheme(uid, themeOne._id, {
         name: "newThemeName",
         colors: ["red", "white", "blue"] as any,
       });
@@ -1379,14 +1360,14 @@ describe("UserDal", () => {
     it("should return error if uid not found", async () => {
       // when, then
       await expect(
-        UserDAL.removeTheme("non existing uid", new ObjectId().toHexString()),
+        UserDAL.removeTheme("non existing uid", randomUUID()),
       ).rejects.toThrow("Custom theme not found\nStack: remove theme");
     });
 
     it("should return error if theme is unknown", async () => {
       // given
       const themeOne = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "first",
         colors: ["green", "white", "red"] as any,
       };
@@ -1395,25 +1376,25 @@ describe("UserDal", () => {
       });
 
       // when, then
-      await expect(
-        UserDAL.removeTheme(uid, new ObjectId().toHexString()),
-      ).rejects.toThrow("Custom theme not found\nStack: remove theme");
+      await expect(UserDAL.removeTheme(uid, randomUUID())).rejects.toThrow(
+        "Custom theme not found\nStack: remove theme",
+      );
     });
     it("should remove theme", async () => {
       // given
       const themeOne = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "first",
         colors: [] as any,
       };
       const themeTwo = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "second",
         colors: [] as any,
       };
 
       const themeThree = {
-        _id: new ObjectId(),
+        _id: randomUUID(),
         name: "third",
         colors: [] as any,
       };
@@ -1423,7 +1404,7 @@ describe("UserDal", () => {
       });
 
       // when, then
-      await UserDAL.removeTheme(uid, themeTwo._id.toHexString());
+      await UserDAL.removeTheme(uid, themeTwo._id);
 
       const read = await UserDAL.getUser(uid, "read");
       expect(read.customThemes).toStrictEqual([themeOne, themeThree]);
@@ -1435,9 +1416,7 @@ describe("UserDal", () => {
       // when, then
       await expect(
         UserDAL.addFavoriteQuote("non existing uid", "english", "1", 5),
-      ).rejects.toThrow(
-        "Maximum number of favorite quotes reached\nStack: add favorite quote",
-      );
+      ).rejects.toThrow("User not found\nStack: get favorite quotes");
     });
 
     it("should return error if user has reached maximum", async () => {
@@ -1506,7 +1485,7 @@ describe("UserDal", () => {
       // when, then
       await expect(
         UserDAL.removeFavoriteQuote("non existing uid", "english", "0"),
-      ).rejects.toThrow("User not found\nStack: remove favorite quote");
+      ).rejects.toThrow("User not found\nStack: get favorite quotes");
     });
 
     it("should not fail if quote is not favorite", async () => {

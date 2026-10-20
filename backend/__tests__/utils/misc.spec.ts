@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll, vi } from "vitest";
 import * as Misc from "../../src/utils/misc";
-import { ObjectId } from "mongodb";
+import { randomUUID } from "crypto";
 
 describe("Misc Utils", () => {
   afterAll(() => {
@@ -318,53 +318,28 @@ describe("Misc Utils", () => {
     });
   });
 
-  describe("replaceObjectId", () => {
-    it("replaces objecId with string", () => {
-      const fromDatabase = {
-        _id: new ObjectId(),
-        test: "test",
-        number: 1,
-      };
-      expect(Misc.replaceObjectId(fromDatabase)).toStrictEqual({
-        _id: fromDatabase._id.toHexString(),
-        test: "test",
-        number: 1,
-      });
+  describe("isUuid", () => {
+    it.for([
+      "00000000-0000-0000-0000-000000000000",
+      "c2aa1a1d-0c3f-4a0e-9a8e-2a5a9f2f9a1b",
+      "C2AA1A1D-0C3F-4A0E-9A8E-2A5A9F2F9A1B",
+      randomUUID(),
+    ])("accepts %s", (value) => {
+      expect(Misc.isUuid(value)).toBe(true);
     });
-    it("ignores null values", () => {
-      expect(Misc.replaceObjectId(null)).toBeNull();
-    });
-  });
 
-  describe("replaceObjectIds", () => {
-    it("replaces objecIds with string", () => {
-      const fromDatabase = {
-        _id: new ObjectId(),
-        test: "test",
-        number: 1,
-      };
-      const fromDatabase2 = {
-        _id: new ObjectId(),
-        test: "bob",
-        number: 2,
-      };
-      expect(
-        Misc.replaceObjectIds([fromDatabase, fromDatabase2]),
-      ).toStrictEqual([
-        {
-          _id: fromDatabase._id.toHexString(),
-          test: "test",
-          number: 1,
-        },
-        {
-          _id: fromDatabase2._id.toHexString(),
-          test: "bob",
-          number: 2,
-        },
-      ]);
-    });
-    it("handles undefined", () => {
-      expect(Misc.replaceObjectIds(undefined as any)).toBeUndefined();
+    it.for([
+      "",
+      "not-a-uuid",
+      // a legacy mongo ObjectId hex string must not pass
+      "657f3b1f8e4b2c0012a3b4c5",
+      "c2aa1a1d0c3f4a0e9a8e2a5a9f2f9a1b",
+      "c2aa1a1d-0c3f-4a0e-9a8e-2a5a9f2f9a1",
+      "c2aa1a1d-0c3f-4a0e-9a8e-2a5a9f2f9a1bb",
+      "g2aa1a1d-0c3f-4a0e-9a8e-2a5a9f2f9a1b",
+      " c2aa1a1d-0c3f-4a0e-9a8e-2a5a9f2f9a1b ",
+    ])("rejects %s", (value) => {
+      expect(Misc.isUuid(value)).toBe(false);
     });
   });
 
