@@ -12,7 +12,6 @@ import {
 } from "../utils/prometheus";
 import { isDevEnvironment } from "../utils/misc";
 import { version } from "../version";
-import { addLog } from "../dal/logs";
 import { ExpressRequestWithContext } from "../api/types";
 
 type DBError = {
@@ -74,11 +73,6 @@ async function errorHandlingMiddleware(
       };
 
       try {
-        await addLog(
-          "system_error",
-          `${status} ${errorId} ${error.message} ${error.stack}`,
-          uid,
-        );
         await db.collection<DBError>("errors").insertOne({
           _id: errorId,
           timestamp: Date.now(),

@@ -21,6 +21,8 @@ import {
   onAuthStateChanged,
   indexedDBLocalPersistence,
   getAdditionalUserInfo,
+  sendEmailVerification as firebaseSendEmailVerification,
+  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
 } from "firebase/auth";
 import { promiseWithResolvers } from "./utils/misc";
 import { isDevEnvironment } from "./utils/env";
@@ -188,6 +190,17 @@ export async function createUserWithEmailAndPassword(
   );
 
   return result;
+}
+
+export async function sendEmailVerification(): Promise<void> {
+  const user = getAuthenticatedUser();
+  if (user === null) throw new Error("Not signed in");
+  await firebaseSendEmailVerification(user);
+}
+
+export async function sendPasswordResetEmail(email: string): Promise<void> {
+  if (Auth === undefined) throw new Error("Authentication uninitialized");
+  await firebaseSendPasswordResetEmail(Auth, email);
 }
 
 export async function getIdToken(): Promise<string | null> {

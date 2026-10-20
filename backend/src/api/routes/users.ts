@@ -23,9 +23,6 @@ export default s.router(usersContract, {
   updateName: {
     handler: async (r) => callController(UserController.updateName)(r),
   },
-  updateLeaderboardMemory: {
-    handler: async (r) => callController(UserController.updateLbMemory)(r),
-  },
   updateEmail: {
     handler: async (r) => callController(UserController.updateEmail)(r),
   },
@@ -37,10 +34,6 @@ export default s.router(usersContract, {
   },
   deletePersonalBests: {
     handler: async (r) => callController(UserController.clearPb)(r),
-  },
-  optOutOfLeaderboards: {
-    handler: async (r) =>
-      callController(UserController.optOutOfLeaderboards)(r),
   },
   addResultFilterPreset: {
     handler: async (r) =>
@@ -77,15 +70,6 @@ export default s.router(usersContract, {
   editCustomTheme: {
     handler: async (r) => callController(UserController.editCustomTheme)(r),
   },
-  getDiscordOAuth: {
-    handler: async (r) => callController(UserController.getOauthLink)(r),
-  },
-  linkDiscord: {
-    handler: async (r) => callController(UserController.linkDiscord)(r),
-  },
-  unlinkDiscord: {
-    handler: async (r) => callController(UserController.unlinkDiscord)(r),
-  },
   getStats: {
     handler: async (r) => callController(UserController.getStats)(r),
   },
@@ -107,23 +91,6 @@ export default s.router(usersContract, {
   updateProfile: {
     handler: async (r) => callController(UserController.updateProfile)(r),
   },
-  getInbox: {
-    handler: async (r) => callController(UserController.getInbox)(r),
-  },
-  updateInbox: {
-    handler: async (r) => callController(UserController.updateInbox)(r),
-  },
-  report: {
-    handler: async (r) => callController(UserController.reportUser)(r),
-  },
-  verificationEmail: {
-    handler: async (r) =>
-      callController(UserController.sendVerificationEmail)(r),
-  },
-  forgotPasswordEmail: {
-    handler: async (r) =>
-      callController(UserController.sendForgotPasswordEmail)(r),
-  },
   revokeAllTokens: {
     handler: async (r) => callController(UserController.revokeAllTokens)(r),
   },
@@ -136,8 +103,5 @@ export default s.router(usersContract, {
   },
   getStreak: {
     handler: async (r) => callController(UserController.getStreak)(r),
-  },
-  getFriends: {
-    handler: async (r) => callController(UserController.getFriends)(r),
   },
 });

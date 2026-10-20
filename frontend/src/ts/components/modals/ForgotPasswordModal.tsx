@@ -1,7 +1,8 @@
 import { UserEmailSchema } from "@monkeytype/schemas/users";
+import { tryCatch } from "@monkeytype/util/trycatch";
 import { createForm } from "@tanstack/solid-form";
 
-import Ape from "../../ape";
+import { sendPasswordResetEmail } from "../../firebase";
 import { hideLoaderBar, showLoaderBar } from "../../states/loader-bar";
 import { hideModal } from "../../states/modals";
 import {
@@ -10,7 +11,6 @@ import {
   showSuccessNotification,
 } from "../../states/notifications";
 import { AnimatedModal } from "../common/AnimatedModal";
-import { Captcha } from "../ui/form/Captcha";
 import { InputField } from "../ui/form/InputField";
 import { SubmitButton } from "../ui/form/SubmitButton";
 import { allFieldsMandatory, fromSchema } from "../ui/form/utils";
@@ -19,7 +19,6 @@ export function ForgotPasswordModal() {
   const form = createForm(() => ({
     defaultValues: {
       email: "",
-      captcha: "",
     },
     onSubmitInvalid: () => {
       showNoticeNotification("Please fill in all fields");
@@ -55,22 +54,14 @@ export function ForgotPasswordModal() {
           )}
         />
 
-        <form.Field
-          name="captcha"
-          children={(field) => <Captcha field={field} />}
-        />
-
         <SubmitButton form={form} text="request password reset" />
       </form>
     </AnimatedModal>
   );
 }
 
-async function apply(options: {
-  email: string;
-  captcha: string;
-}): Promise<void> {
-  const { email, captcha } = options;
+async function apply(options: { email: string }): Promise<void> {
+  const { email } = options;
 
   if (email === undefined || email === "") {
     showNoticeNotification("Please enter your email address");
@@ -78,19 +69,18 @@ async function apply(options: {
   }
 
   showLoaderBar();
-  const result = await Ape.users.forgotPasswordEmail({
-    body: { email, captcha },
-  });
-
+  const { error } = await tryCatch(sendPasswordResetEmail(email));
   hideLoaderBar();
-  if (result.status !== 200) {
-    showErrorNotification(
-      `Failed to send password reset email: ${result.body.message}`,
-    );
+
+  if (error) {
+    showErrorNotification("Failed to send password reset email", { error });
     return;
   }
 
-  showSuccessNotification(result.body.message, { durationMs: 5000 });
+  showSuccessNotification(
+    "Password reset request received. If the email is valid, you will receive an email shortly.",
+    { durationMs: 5000 },
+  );
 
   hideModal("ForgotPassword");
 }

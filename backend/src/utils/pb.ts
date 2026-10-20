@@ -2,14 +2,9 @@ import { Mode, PersonalBest, PersonalBests } from "@monkeytype/schemas/shared";
 import { Result as ResultType } from "@monkeytype/schemas/results";
 import { getFunbox } from "@monkeytype/funbox";
 
-export type LbPersonalBests = {
-  time: Record<number, Record<string, PersonalBest>>;
-};
-
 type CheckAndUpdatePbResult = {
   isPb: boolean;
   personalBests: PersonalBests;
-  lbPersonalBests?: LbPersonalBests;
 };
 
 type Result = Omit<ResultType<Mode>, "_id" | "name">;
@@ -22,7 +17,6 @@ export function canFunboxGetPb(result: Result): boolean {
 
 export function checkAndUpdatePb(
   userPersonalBests: PersonalBests,
-  lbPersonalBests: LbPersonalBests | undefined,
   result: Result,
 ): CheckAndUpdatePbResult {
   const mode = result.mode;
@@ -45,21 +39,9 @@ export function checkAndUpdatePb(
     (userPb[mode][mode2] as PersonalBest[]).push(buildPersonalBest(result));
   }
 
-  if (lbPersonalBests !== undefined && lbPersonalBests !== null) {
-    const newLbPb = updateLeaderboardPersonalBests(
-      userPb,
-      lbPersonalBests,
-      result,
-    );
-    if (newLbPb !== null) {
-      lbPersonalBests = newLbPb;
-    }
-  }
-
   return {
     isPb,
     personalBests: userPb,
-    lbPersonalBests: lbPersonalBests,
   };
 }
 
@@ -157,54 +139,4 @@ function buildPersonalBest(result: Result): PersonalBest {
     numbers: result.numbers,
     timestamp: Date.now(),
   };
-}
-
-export function updateLeaderboardPersonalBests(
-  userPersonalBests: PersonalBests,
-  lbPersonalBests: LbPersonalBests,
-  result: Result,
-): LbPersonalBests | null {
-  if (!shouldUpdateLeaderboardPersonalBests(result)) {
-    return null;
-  }
-  const lbPb = lbPersonalBests ?? {};
-  const mode = result.mode as keyof typeof lbPb;
-  const mode2 = result.mode2 as unknown as keyof (typeof lbPb)[typeof mode];
-  lbPb[mode] ??= {};
-  lbPb[mode][mode2] ??= {};
-
-  const bestForEveryLanguage: Record<string, PersonalBest> = {};
-  (userPersonalBests[mode][mode2] as PersonalBest[]).forEach(
-    (pb: PersonalBest) => {
-      const language = pb.language;
-      if (
-        bestForEveryLanguage[language] === undefined ||
-        bestForEveryLanguage[language].wpm < pb.wpm
-      ) {
-        bestForEveryLanguage[language] = pb;
-      }
-    },
-  );
-  Object.entries(bestForEveryLanguage).forEach(([language, pb]) => {
-    const languageDoesNotExist = lbPb[mode][mode2]?.[language] === undefined;
-    const languageIsEmpty =
-      lbPb[mode][mode2]?.[language] &&
-      Object.keys(lbPb[mode][mode2][language]).length === 0;
-
-    if (
-      (languageDoesNotExist ||
-        languageIsEmpty ||
-        (lbPb[mode][mode2]?.[language]?.wpm ?? 0) < pb.wpm) &&
-      lbPb[mode][mode2] !== undefined
-    ) {
-      lbPb[mode][mode2][language] = pb;
-    }
-  });
-  return lbPb;
-}
-
-function shouldUpdateLeaderboardPersonalBests(result: Result): boolean {
-  const isValidTimeMode =
-    result.mode === "time" && (result.mode2 === "15" || result.mode2 === "60");
-  return isValidTimeMode && !result.lazyMode;
 }

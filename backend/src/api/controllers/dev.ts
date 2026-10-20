@@ -6,20 +6,16 @@ import * as DateUtils from "date-fns";
 import { UTCDate } from "@date-fns/utc";
 import * as ResultDal from "../../dal/result";
 import { ObjectId } from "mongodb";
-import * as LeaderboardDal from "../../dal/leaderboards";
 import MonkeyError from "../../utils/error";
 
 import { Mode, PersonalBest, PersonalBests } from "@monkeytype/schemas/shared";
 import {
-  AddDebugInboxItemRequest,
   GenerateDataRequest,
   GenerateDataResponse,
 } from "@monkeytype/contracts/dev";
-import { buildMonkeyMail } from "../../utils/monkey-mail";
 import { roundTo2 } from "@monkeytype/util/numbers";
 import { MonkeyRequest } from "../types";
 import { DBResult } from "../../utils/result";
-import { LbPersonalBests } from "../../utils/pb";
 import { Language } from "@monkeytype/schemas/languages";
 
 const CREATE_RESULT_DEFAULT_OPTIONS = {
@@ -39,40 +35,8 @@ export async function createTestData(
 
   await createTestResults(user, req.body);
   await updateUser(uid);
-  await updateLeaderboard();
 
   return new MonkeyResponse("test data created", { uid, email });
-}
-
-export async function addDebugInboxItem(
-  req: MonkeyRequest<undefined, AddDebugInboxItemRequest>,
-): Promise<MonkeyResponse> {
-  const { uid } = req.ctx.decodedToken;
-  const { rewardType } = req.body;
-  const inboxConfig = req.ctx.configuration.users.inbox;
-
-  const rewards =
-    rewardType === "xp"
-      ? [{ type: "xp" as const, item: 1000 }]
-      : rewardType === "badge"
-        ? [{ type: "badge" as const, item: { id: 1 } }]
-        : [];
-
-  const body =
-    rewardType === "xp"
-      ? "Here is your 1000 XP reward for debugging."
-      : rewardType === "badge"
-        ? "Here is your Developer badge reward."
-        : "A debug inbox item with no reward.";
-
-  const mail = buildMonkeyMail({
-    subject: "Debug Inbox Item",
-    body,
-    rewards,
-  });
-
-  await UserDal.addToInbox(uid, [mail], inboxConfig);
-  return new MonkeyResponse("Debug inbox item added", null);
 }
 
 async function getOrCreateUser(
@@ -221,13 +185,6 @@ async function updateUser(uid: string): Promise<void> {
   );
 
   //update PBs
-  const lbPersonalBests: LbPersonalBests = {
-    time: {
-      15: {},
-      60: {},
-    },
-  };
-
   const personalBests: PersonalBests = {
     time: {},
     custom: {},
@@ -275,15 +232,6 @@ async function updateUser(uid: string): Promise<void> {
 
     (personalBests[mode.mode][mode.mode2] as PersonalBest[]).push(entry);
 
-    if (mode.mode === "time") {
-      if (lbPersonalBests[mode.mode][mode.mode2] === undefined) {
-        lbPersonalBests[mode.mode][mode.mode2] = {};
-      }
-
-      // oxlint-disable-next-line no-unsafe-member-access
-      lbPersonalBests[mode.mode][mode.mode2][mode.language] = entry;
-    }
-
     //update testActivity
     await updateTestActivity(uid);
   }
@@ -297,15 +245,9 @@ async function updateUser(uid: string): Promise<void> {
         completedTests: completedTests,
         startedTests: Math.round(completedTests * 1.25),
         personalBests: personalBests,
-        lbPersonalBests: lbPersonalBests,
       },
     },
   );
-}
-
-async function updateLeaderboard(): Promise<void> {
-  await LeaderboardDal.update("time", "15", "english");
-  await LeaderboardDal.update("time", "60", "english");
 }
 
 function randomValue<T>(values: T[]): T {

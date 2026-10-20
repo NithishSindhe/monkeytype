@@ -1,5 +1,4 @@
 import * as ResultDAL from "../../dal/result";
-import * as PublicDAL from "../../dal/public";
 import {
   isDevEnvironment,
   omit,
@@ -18,23 +17,11 @@ import {
   validateKeys,
 } from "../../anticheat/index";
 import MonkeyStatusCodes from "../../constants/monkey-status-codes";
-import {
-  incrementResult,
-  incrementDailyLeaderboard,
-} from "../../utils/prometheus";
-import GeorgeQueue from "../../queues/george-queue";
-import {
-  getDailyLeaderboard,
-  purgeUserFromDailyLeaderboards,
-} from "../../utils/daily-leaderboards";
+import { incrementResult } from "../../utils/prometheus";
 import * as UserDAL from "../../dal/user";
-import { buildMonkeyMail } from "../../utils/monkey-mail";
-import * as WeeklyXpLeaderboard from "../../services/weekly-xp-leaderboard";
 import { UAParser } from "ua-parser-js";
-import { canFunboxGetPb } from "../../utils/pb";
 import { buildDbResult } from "../../utils/result";
 import { Configuration } from "@monkeytype/schemas/configuration";
-import { addImportantLog, addLog } from "../../dal/logs";
 import {
   AddResultRequest,
   AddResultResponse,
@@ -65,8 +52,6 @@ import {
 import { MonkeyRequest } from "../types";
 import { getFunbox, checkCompatibility } from "@monkeytype/funbox";
 import { tryCatch } from "@monkeytype/util/trycatch";
-import { getCachedConfiguration } from "../../init/configuration";
-import { getChallenges } from "@monkeytype/challenges";
 
 try {
   if (!anticheatImplemented()) throw new Error("undefined");
@@ -83,12 +68,6 @@ try {
     process.exit(1);
   }
 }
-
-const autoRoleChallengeNames = new Set(
-  getChallenges()
-    .filter((it) => it.settings?.autoRole)
-    .map((it) => it.name),
-);
 
 export async function getResults(
   req: MonkeyRequest<GetResultsQuery>,
@@ -130,17 +109,6 @@ export async function getResults(
     limit,
     offset,
   });
-  void addLog(
-    "user_results_requested",
-    {
-      limit,
-      offset,
-      onOrAfterTimestamp,
-      isPremium: userHasPremium,
-    },
-    uid,
-  );
-
   return new MonkeyResponse("Results retrieved", replaceObjectIds(results));
 }
 
@@ -207,7 +175,7 @@ export async function addResult(
     throw new MonkeyError(status.code, status.message);
   }
 
-  if (user.lbOptOut !== true && completedEvent.acc < 75) {
+  if (completedEvent.acc < 75) {
     throw new MonkeyError(400, "Accuracy too low");
   }
 
@@ -216,15 +184,6 @@ export async function addResult(
     const objectToHash = omit(completedEvent, ["hash"]);
     const serverhash = objectHash(objectToHash);
     if (serverhash !== resulthash) {
-      void addLog(
-        "incorrect_result_hash",
-        {
-          serverhash,
-          resulthash,
-          result: completedEvent,
-        },
-        uid,
-      );
       const status = MonkeyStatusCodes.RESULT_HASH_INVALID;
       throw new MonkeyError(status.code, "Incorrect result hash");
     }
@@ -269,16 +228,15 @@ export async function addResult(
   }
 
   if (user.suspicious && completedEvent.testDuration <= 120) {
-    await addImportantLog("suspicious_user_result", completedEvent, uid);
+    Logger.warning(`Suspicious user result from ${uid}`);
   }
 
   if (
     completedEvent.mode === "time" &&
     (completedEvent.mode2 === "60" || completedEvent.mode2 === "15") &&
-    completedEvent.wpm > 250 &&
-    user.lbOptOut !== true
+    completedEvent.wpm > 250
   ) {
-    await addImportantLog("highwpm_user_result", completedEvent, uid);
+    Logger.warning(`High wpm result from ${uid}: ${completedEvent.wpm} wpm`);
   }
 
   if (anticheatImplemented()) {
@@ -288,7 +246,7 @@ export async function addResult(
         ((req.raw.headers["x-client-version"] as string) ||
           req.raw.headers["client-version"]) as string,
         JSON.stringify(new UAParser(req.raw.headers["user-agent"]).getResult()),
-        user.lbOptOut === true,
+        false,
       )
     ) {
       const status = MonkeyStatusCodes.RESULT_DATA_INVALID;
@@ -344,17 +302,6 @@ export async function addResult(
     isSafeNumber(lastResultTimestamp) &&
     nowNoMilis < earliestPossible - 1000
   ) {
-    void addLog(
-      "invalid_result_spacing",
-      {
-        lastTimestamp: lastResultTimestamp,
-        earliestPossible,
-        now: nowNoMilis,
-        testDuration: testDurationMilis,
-        difference: nowNoMilis - earliestPossible,
-      },
-      uid,
-    );
     const status = MonkeyStatusCodes.RESULT_SPACING_INVALID;
     throw new MonkeyError(status.code, "Invalid result spacing");
   }
@@ -364,8 +311,7 @@ export async function addResult(
     completedEvent.mode === "time" &&
     completedEvent.wpm > 130 &&
     completedEvent.testDuration < 122 &&
-    (user.verified === false || user.verified === undefined) &&
-    user.lbOptOut !== true
+    (user.verified === false || user.verified === undefined)
   ) {
     if (!keySpacingStats || !keyDurationStats) {
       const status = MonkeyStatusCodes.MISSING_KEY_DATA;
@@ -387,25 +333,6 @@ export async function addResult(
             autoBanConfig.maxHours,
           );
           if (didUserGetBanned) {
-            const mail = buildMonkeyMail({
-              subject: "Banned",
-              body: "Your account has been automatically banned for triggering the anticheat system. If you believe this is a mistake, please contact support.",
-            });
-            await Promise.all([
-              UserDAL.addToInbox(
-                uid,
-                [mail],
-                req.ctx.configuration.users.inbox,
-              ),
-              purgeUserFromDailyLeaderboards(
-                uid,
-                req.ctx.configuration.dailyLeaderboards,
-              ),
-              WeeklyXpLeaderboard.purgeUserFromXpLeaderboards(
-                uid,
-                req.ctx.configuration.leaderboards.weeklyXp,
-              ),
-            ]);
             user.banned = true;
           }
         }
@@ -425,15 +352,6 @@ export async function addResult(
   if (req.ctx.configuration.users.lastHashesCheck.enabled) {
     let lastHashes = user.lastReultHashes ?? [];
     if (lastHashes.includes(resulthash)) {
-      void addLog(
-        "duplicate_result",
-        {
-          lastHashes,
-          resulthash,
-          result: completedEvent,
-        },
-        uid,
-      );
       const status = MonkeyStatusCodes.DUPLICATE_RESULT;
       throw new MonkeyError(status.code, "Duplicate result");
     } else {
@@ -467,27 +385,9 @@ export async function addResult(
 
   if (completedEvent.mode === "time" && completedEvent.mode2 === "60") {
     void UserDAL.incrementBananas(uid, completedEvent.wpm);
-    if (
-      isPb &&
-      user.discordId !== undefined &&
-      user.discordId !== "" &&
-      user.lbOptOut !== true
-    ) {
-      void GeorgeQueue.updateDiscordRole(user.discordId, completedEvent.wpm);
-    }
   }
 
-  if (
-    completedEvent.challenge !== null &&
-    completedEvent.challenge !== undefined &&
-    autoRoleChallengeNames.has(completedEvent.challenge) &&
-    user.discordId !== undefined &&
-    user.discordId !== ""
-  ) {
-    void GeorgeQueue.awardChallenge(user.discordId, completedEvent.challenge);
-  } else {
-    delete completedEvent.challenge;
-  }
+  delete completedEvent.challenge;
 
   const afk = completedEvent.afkDuration ?? 0;
   const totalDurationTypedSeconds =
@@ -497,105 +397,8 @@ export async function addResult(
     completedEvent.restartCount,
     totalDurationTypedSeconds,
   );
-  void PublicDAL.updateStats(
-    completedEvent.restartCount,
-    totalDurationTypedSeconds,
-  );
-
-  const dailyLeaderboardsConfig = req.ctx.configuration.dailyLeaderboards;
-  const dailyLeaderboard = getDailyLeaderboard(
-    completedEvent.language,
-    completedEvent.mode,
-    completedEvent.mode2,
-    dailyLeaderboardsConfig,
-  );
-
-  let dailyLeaderboardRank = -1;
-
-  const stopOnLetterTriggered =
-    completedEvent.stopOnLetter && completedEvent.acc < 100;
-
-  const minTimeTyping = (await getCachedConfiguration(true)).leaderboards
-    .minTimeTyping;
-
-  const userEligibleForLeaderboard =
-    user.banned !== true &&
-    user.lbOptOut !== true &&
-    (isDevEnvironment() || (user.timeTyping ?? 0) > minTimeTyping);
-
-  const validResultCriteria =
-    canFunboxGetPb(completedEvent) &&
-    !completedEvent.bailedOut &&
-    userEligibleForLeaderboard &&
-    !stopOnLetterTriggered;
-
-  const selectedBadgeId = user.inventory?.badges?.find((b) => b.selected)?.id;
-  const isPremium =
-    (await UserDAL.checkIfUserIsPremium(user.uid, user)) || undefined;
-
-  if (dailyLeaderboard && validResultCriteria) {
-    incrementDailyLeaderboard(
-      completedEvent.mode,
-      completedEvent.mode2,
-      completedEvent.language,
-    );
-    dailyLeaderboardRank = await dailyLeaderboard.addResult(
-      {
-        name: user.name,
-        wpm: completedEvent.wpm,
-        raw: completedEvent.rawWpm,
-        acc: completedEvent.acc,
-        consistency: completedEvent.consistency,
-        timestamp: completedEvent.timestamp,
-        uid,
-        discordAvatar: user.discordAvatar,
-        discordId: user.discordId,
-        badgeId: selectedBadgeId,
-        isPremium,
-      },
-      dailyLeaderboardsConfig,
-    );
-    if (
-      dailyLeaderboardRank >= 1 &&
-      dailyLeaderboardRank <= 10 &&
-      completedEvent.testDuration <= 120
-    ) {
-      const now = Date.now();
-      const reset = getCurrentDayTimestamp();
-      const limit = 6 * 60 * 60 * 1000;
-      if (now - reset >= limit) {
-        await addLog("daily_leaderboard_top_10_result", completedEvent, uid);
-      }
-    }
-  }
 
   const streak = await UserDAL.updateStreak(uid, completedEvent.timestamp);
-  const badgeWaitingInInbox = (
-    user.inbox?.flatMap((i) =>
-      (i.rewards ?? []).map((r) => (r.type === "badge" ? r.item.id : null)),
-    ) ?? []
-  ).includes(14);
-
-  const shouldGetBadge =
-    streak >= 365 &&
-    user.inventory?.badges?.find((b) => b.id === 14) === undefined &&
-    !badgeWaitingInInbox;
-
-  if (shouldGetBadge) {
-    const mail = buildMonkeyMail({
-      subject: "Badge",
-      body: "Congratulations for reaching a 365 day streak! You have been awarded a special badge. Now, go touch some grass.",
-      rewards: [
-        {
-          type: "badge",
-          item: {
-            id: 14,
-          },
-        },
-      ],
-    });
-    await UserDAL.addToInbox(uid, [mail], req.ctx.configuration.users.inbox);
-  }
 
   const xpGained = await calculateXp(
     completedEvent,
@@ -629,31 +432,6 @@ export async function addResult(
     );
   }
 
-  const weeklyXpLeaderboardConfig = req.ctx.configuration.leaderboards.weeklyXp;
-  let weeklyXpLeaderboardRank = -1;
-
-  const weeklyXpLeaderboard = WeeklyXpLeaderboard.get(
-    weeklyXpLeaderboardConfig,
-  );
-  if (userEligibleForLeaderboard && xpGained.xp > 0 && weeklyXpLeaderboard) {
-    weeklyXpLeaderboardRank = await weeklyXpLeaderboard.addResult(
-      weeklyXpLeaderboardConfig,
-      {
-        entry: {
-          uid,
-          name: user.name,
-          discordAvatar: user.discordAvatar,
-          discordId: user.discordId,
-          badgeId: selectedBadgeId,
-          lastActivityTimestamp: Date.now(),
-          isPremium,
-          timeTypedSeconds: totalDurationTypedSeconds,
-        },
-        xpGained: xpGained.xp,
-      },
-    );
-  }
-
   const dbresult = buildDbResult(completedEvent, user.name, isPb);
   if (keySpacingStats !== undefined) {
     dbresult.keySpacingStats = keySpacingStats;
@@ -667,18 +445,6 @@ export async function addResult(
   await UserDAL.incrementXp(uid, xpGained.xp);
   await UserDAL.incrementTestActivity(user, completedEvent.timestamp);
 
-  if (isPb) {
-    void addLog(
-      "user_new_pb",
-      `${`${completedEvent.mode} ${completedEvent.mode2}`} ${
-        completedEvent.wpm
-      } ${completedEvent.acc}% ${completedEvent.rawWpm} ${
-        completedEvent.consistency
-      }% (${addedResult.insertedId})`,
-      uid,
-    );
-  }
-
   const data: PostResultResponse = {
     isPb,
     tagPbs,
@@ -688,14 +454,6 @@ export async function addResult(
     xpBreakdown: xpGained.breakdown ?? {},
     streak,
   };
-
-  if (dailyLeaderboardRank !== -1) {
-    data.dailyLeaderboardRank = dailyLeaderboardRank;
-  }
-
-  if (weeklyXpLeaderboardRank !== -1) {
-    data.weeklyXpLeaderboardRank = weeklyXpLeaderboardRank;
-  }
 
   incrementResult(completedEvent, dbresult.isPb);
 

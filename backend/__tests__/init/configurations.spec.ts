@@ -14,20 +14,21 @@ describe("configurations", () => {
           responseSlowdownMs: 5,
         },
         quotes: {
-          reporting: {
+          maxFavorites: 5,
+        },
+        users: {
+          signUp: false,
+          premium: {
             enabled: false,
-            maxReports: 5,
           },
-          submissionEnabled: true,
         },
       } as any;
       const liveConfig: Partial<Configuration> = {
         maintenance: true,
-        quotes: {
-          reporting: {
+        users: {
+          premium: {
             enabled: true,
-          } as any,
-          maxFavorites: 10,
+          },
         } as any,
       };
 
@@ -41,11 +42,13 @@ describe("configurations", () => {
           responseSlowdownMs: 5,
         },
         quotes: {
-          reporting: {
+          maxFavorites: 5,
+        },
+        users: {
+          signUp: false,
+          premium: {
             enabled: true,
-            maxReports: 5,
           },
-          submissionEnabled: true,
         },
       } as any);
     });

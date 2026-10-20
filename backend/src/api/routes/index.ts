@@ -1,30 +1,13 @@
 import { contract } from "@monkeytype/contracts/index";
-import psas from "./psas";
-import publicStats from "./public";
 import users from "./users";
-import { join } from "path";
-import quotes from "./quotes";
 import results from "./results";
 import presets from "./presets";
-import apeKeys from "./ape-keys";
-import admin from "./admin";
-import docs from "./docs";
-import webhooks from "./webhooks";
 import dev from "./dev";
 import configs from "./configs";
 import configuration from "./configuration";
 import { version } from "../../version";
-import leaderboards from "./leaderboards";
-import connections from "./connections";
-import addSwaggerMiddlewares from "./swagger";
 import { MonkeyResponse } from "../../utils/monkey-response";
-import {
-  Application,
-  IRouter,
-  NextFunction,
-  Response,
-  static as expressStatic,
-} from "express";
+import { Application, IRouter, NextFunction, Response } from "express";
 import { isDevEnvironment } from "../../utils/misc";
 import { getLiveConfiguration } from "../../init/configuration";
 import Logger from "../../utils/logger";
@@ -32,34 +15,19 @@ import { createExpressEndpoints, initServer } from "@ts-rest/express";
 import { ZodIssue } from "zod";
 import { authenticateTsRestRequest } from "../../middlewares/auth";
 import { rateLimitRequest } from "../../middlewares/rate-limit";
-import { verifyPermissions } from "../../middlewares/permission";
 import { verifyRequiredConfiguration } from "../../middlewares/configuration";
 import { ExpressRequestWithContext } from "../types";
 
-const pathOverride = process.env["API_PATH_OVERRIDE"];
-const BASE_ROUTE = pathOverride !== undefined ? `/${pathOverride}` : "";
 const APP_START_TIME = Date.now();
-
-const API_ROUTE_MAP = {
-  "/docs": docs,
-};
 
 const s = initServer();
 const router = s.router(contract, {
-  admin,
-  apeKeys,
   configs,
   presets,
-  psas,
-  public: publicStats,
-  leaderboards,
   results,
   configuration,
   dev,
   users,
-  quotes,
-  webhooks,
-  connections,
 });
 
 export function addApiRoutes(app: Application): void {
@@ -116,7 +84,6 @@ function applyTsRestApiRoutes(app: IRouter): void {
       authenticateTsRestRequest(),
       rateLimitRequest(),
       verifyRequiredConfiguration(),
-      verifyPermissions(),
     ],
   });
 }
@@ -134,8 +101,6 @@ function applyDevApiRoutes(app: Application): void {
       res.setHeader("Content-Security-Policy", "");
       next();
     });
-    app.use("/configure", expressStatic(join(__dirname, "../../../private")));
-
     app.use(async (req, res, next) => {
       const slowdown = (await getLiveConfiguration()).dev.responseSlowdownMs;
       if (slowdown > 0) {
@@ -150,8 +115,6 @@ function applyDevApiRoutes(app: Application): void {
 }
 
 function applyApiRoutes(app: Application): void {
-  addSwaggerMiddlewares(app);
-
   app.use(
     (
       req: ExpressRequestWithContext,
@@ -184,9 +147,4 @@ function applyApiRoutes(app: Application): void {
       }),
     );
   });
-
-  for (const [route, mapRouter] of Object.entries(API_ROUTE_MAP)) {
-    const apiRoute = `${BASE_ROUTE}${route}`;
-    app.use(apiRoute, mapRouter);
-  }
 }

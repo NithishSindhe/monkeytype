@@ -3,18 +3,21 @@ import { ObjectId } from "mongodb";
 import Logger from "../utils/logger";
 import { identity, isPlainObject, omit } from "../utils/misc";
 import { BASE_CONFIGURATION } from "../constants/base-configuration";
-import { Configuration } from "@monkeytype/schemas/configuration";
-import { addLog } from "../dal/logs";
 import {
-  PartialConfiguration,
-  PartialConfigurationSchema,
-} from "@monkeytype/contracts/configuration";
+  Configuration,
+  ConfigurationSchema,
+} from "@monkeytype/schemas/configuration";
 import { getErrorMessage } from "../utils/error";
 import { join } from "path";
 import { existsSync, readFileSync } from "fs";
 import { parseWithSchema as parseJsonWithSchema } from "@monkeytype/util/json";
 import { z } from "zod";
 import { intersect } from "@monkeytype/util/arrays";
+
+// marked as deprecated but zod team might reconsider according to https://github.com/colinhacks/zod/issues/2854#issuecomment-3100623150
+// oxlint-disable-next-line no-deprecated
+const PartialConfigurationSchema = ConfigurationSchema.deepPartial();
+type PartialConfiguration = z.infer<typeof PartialConfigurationSchema>;
 
 const CONFIG_UPDATE_INTERVAL = 10 * 60 * 1000; // 10 Minutes
 const SERVER_CONFIG_FILE_PATH = join(
@@ -95,10 +98,7 @@ export async function getLiveConfiguration(): Promise<Configuration> {
     }
   } catch (error) {
     const errorMessage = getErrorMessage(error) ?? "Unknown error";
-    void addLog(
-      "fetch_configuration_failure",
-      `Could not fetch configuration: ${errorMessage}`,
-    );
+    Logger.error(`Could not fetch configuration: ${errorMessage}`);
   }
 
   return configuration;
@@ -116,10 +116,7 @@ async function pushConfiguration(
     serverConfigurationUpdated = true;
   } catch (error) {
     const errorMessage = getErrorMessage(error) ?? "Unknown error";
-    void addLog(
-      "push_configuration_failure",
-      `Could not push configuration: ${errorMessage}`,
-    );
+    Logger.error(`Could not push configuration: ${errorMessage}`);
   }
 }
 
@@ -137,10 +134,7 @@ export async function patchConfiguration(
     await getLiveConfiguration();
   } catch (error) {
     const errorMessage = getErrorMessage(error) ?? "Unknown error";
-    void addLog(
-      "patch_configuration_failure",
-      `Could not patch configuration: ${errorMessage}`,
-    );
+    Logger.error(`Could not patch configuration: ${errorMessage}`);
 
     return false;
   }

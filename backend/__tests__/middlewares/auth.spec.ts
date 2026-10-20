@@ -4,9 +4,6 @@ import * as Auth from "../../src/middlewares/auth";
 import { DecodedIdToken } from "firebase-admin/auth";
 import { NextFunction, Request, Response } from "express";
 import { getCachedConfiguration } from "../../src/init/configuration";
-import * as ApeKeys from "../../src/dal/ape-keys";
-import { ObjectId } from "mongodb";
-import { hashSync } from "bcrypt";
 import MonkeyError from "../../src/utils/error";
 import * as Misc from "../../src/utils/misc";
 import crypto from "crypto";
@@ -17,7 +14,6 @@ import {
 import * as Prometheus from "../../src/utils/prometheus";
 import { TsRestRequestWithContext } from "../../src/api/types";
 import { enableMonkeyErrorExpects } from "../__testData__/monkey-error";
-import { Context } from "../../src/middlewares/context";
 
 enableMonkeyErrorExpects();
 const mockDecodedToken: DecodedIdToken = {
@@ -28,19 +24,6 @@ const mockDecodedToken: DecodedIdToken = {
 
 vi.spyOn(AuthUtils, "verifyIdToken").mockResolvedValue(mockDecodedToken);
 
-const mockApeKey = {
-  _id: new ObjectId(),
-  uid: "123",
-  name: "test",
-  hash: hashSync("key", 5),
-  createdOn: Date.now(),
-  modifiedOn: Date.now(),
-  lastUsedOn: Date.now(),
-  useCount: 0,
-  enabled: true,
-};
-vi.spyOn(ApeKeys, "getApeKey").mockResolvedValue(mockApeKey);
-vi.spyOn(ApeKeys, "updateLastUsedOn").mockResolvedValue();
 const isDevModeMock = vi.spyOn(Misc, "isDevEnvironment");
 let mockRequest: Partial<TsRestRequestWithContext>;
 let mockResponse: Partial<Response>;
@@ -49,8 +32,7 @@ let nextFunction: NextFunction;
 describe("middlewares/auth", () => {
   beforeEach(async () => {
     isDevModeMock.mockReturnValue(true);
-    let config = await getCachedConfiguration(true);
-    config.apeKeys.acceptKeys = true;
+    const config = await getCachedConfiguration(true);
 
     mockRequest = {
       baseUrl: "/api/v1",
@@ -134,46 +116,6 @@ describe("middlewares/auth", () => {
       expect(prometheusIncrementAuthMock).toHaveBeenCalledWith("Bearer");
       expect(prometheusRecordAuthTimeMock).toHaveBeenCalledOnce();
     });
-    it("should allow the request if apeKey is supported", async () => {
-      //WHEN
-      const result = await authenticate(
-        { headers: { authorization: "ApeKey aWQua2V5" } },
-        { acceptApeKeys: true },
-      );
-
-      //THEN
-      const decodedToken = result.decodedToken;
-      expect(decodedToken?.type).toBe("ApeKey");
-      expect(decodedToken?.email).toBe("");
-      expect(decodedToken?.uid).toBe("123");
-      expect(nextFunction).toHaveBeenCalledTimes(1);
-    });
-    it("should fail with apeKey if apeKey is not supported", async () => {
-      //WHEN
-      await expect(async () =>
-        authenticate(
-          { headers: { authorization: "ApeKey aWQua2V5" } },
-          { acceptApeKeys: false },
-        ),
-      ).rejects.toThrow("This endpoint does not accept ApeKeys");
-
-      //THEN
-    });
-    it("should fail with apeKey if apeKeys are disabled", async () => {
-      //GIVEN
-
-      (mockRequest.ctx as Context).configuration.apeKeys.acceptKeys = false;
-
-      //WHEN
-      await expect(async () =>
-        authenticate(
-          { headers: { authorization: "ApeKey aWQua2V5" } },
-          { acceptApeKeys: false },
-        ),
-      ).rejects.toThrow("ApeKeys are not being accepted at this time");
-
-      //THEN
-    });
     it("should allow the request with authentation on public endpoint", async () => {
       //WHEN
       const result = await authenticate({}, { isPublic: true });
@@ -197,23 +139,6 @@ describe("middlewares/auth", () => {
       expect(nextFunction).toHaveBeenCalledTimes(1);
 
       expect(prometheusIncrementAuthMock).toHaveBeenCalledWith("None");
-      expect(prometheusRecordAuthTimeMock).toHaveBeenCalledOnce();
-    });
-    it("should allow the request with apeKey on public endpoint", async () => {
-      //WHEN
-      const result = await authenticate(
-        { headers: { authorization: "ApeKey aWQua2V5" } },
-        { isPublic: true },
-      );
-
-      //THEN
-      const decodedToken = result.decodedToken;
-      expect(decodedToken?.type).toBe("ApeKey");
-      expect(decodedToken?.email).toBe("");
-      expect(decodedToken?.uid).toBe("123");
-      expect(nextFunction).toHaveBeenCalledTimes(1);
-
-      expect(prometheusIncrementAuthMock).toHaveBeenCalledWith("ApeKey");
       expect(prometheusRecordAuthTimeMock).toHaveBeenCalledOnce();
     });
     it("should allow request with Uid on dev", async () => {
@@ -359,43 +284,6 @@ describe("middlewares/auth", () => {
       expect(prometheusIncrementAuthMock).toHaveBeenCalledWith("None");
       expect(prometheusRecordAuthTimeMock).toHaveBeenCalledOnce();
     });
-    it("should allow the request with apeKey on dev public endpoint", async () => {
-      //WHEN
-      const result = await authenticate(
-        { headers: { authorization: "ApeKey aWQua2V5" } },
-        { acceptApeKeys: true, isPublicOnDev: true },
-      );
-
-      //THEN
-      const decodedToken = result.decodedToken;
-      expect(decodedToken?.type).toBe("ApeKey");
-      expect(decodedToken?.email).toBe("");
-      expect(decodedToken?.uid).toBe("123");
-      expect(nextFunction).toHaveBeenCalledTimes(1);
-
-      expect(prometheusIncrementAuthMock).toHaveBeenCalledWith("ApeKey");
-      expect(prometheusRecordAuthTimeMock).toHaveBeenCalledOnce();
-    });
-    it("should allow with apeKey if apeKeys are disabled on dev public endpoint", async () => {
-      //GIVEN
-      (mockRequest.ctx as Context).configuration.apeKeys.acceptKeys = false;
-
-      //WHEN
-      const result = await authenticate(
-        { headers: { authorization: "ApeKey aWQua2V5" } },
-        { acceptApeKeys: true, isPublicOnDev: true },
-      );
-
-      //THEN
-      const decodedToken = result.decodedToken;
-      expect(decodedToken?.type).toBe("ApeKey");
-      expect(decodedToken?.email).toBe("");
-      expect(decodedToken?.uid).toBe("123");
-      expect(nextFunction).toHaveBeenCalledTimes(1);
-
-      expect(prometheusIncrementAuthMock).toHaveBeenCalledWith("ApeKey");
-      expect(prometheusRecordAuthTimeMock).toHaveBeenCalledOnce();
-    });
     it("should allow the request with authentation on dev public endpoint in production", async () => {
       //WHEN
       isDevModeMock.mockReturnValue(false);
@@ -416,24 +304,6 @@ describe("middlewares/auth", () => {
       await expect(async () =>
         authenticate({ headers: {} }, { isPublicOnDev: true }),
       ).rejects.toThrow("Unauthorized");
-    });
-    it("should allow with apeKey on dev public endpoint in production", async () => {
-      //WHEN
-      isDevModeMock.mockReturnValue(false);
-      const result = await authenticate(
-        { headers: { authorization: "ApeKey aWQua2V5" } },
-        { acceptApeKeys: true, isPublicOnDev: true },
-      );
-
-      //THEN
-      const decodedToken = result.decodedToken;
-      expect(decodedToken?.type).toBe("ApeKey");
-      expect(decodedToken?.email).toBe("");
-      expect(decodedToken?.uid).toBe("123");
-      expect(nextFunction).toHaveBeenCalledTimes(1);
-
-      expect(prometheusIncrementAuthMock).toHaveBeenCalledWith("ApeKey");
-      expect(prometheusRecordAuthTimeMock).toHaveBeenCalledOnce();
     });
     it("should allow githubwebhook with header", async () => {
       vi.stubEnv("GITHUB_WEBHOOK_SECRET", "GITHUB_WEBHOOK_SECRET");

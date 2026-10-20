@@ -32,6 +32,7 @@ import {
   getAuthenticatedUser,
   isAuthAvailable,
   resetIgnoreAuthCallback,
+  sendEmailVerification as authSendEmailVerification,
   signInWithEmailAndPassword,
   signInWithPopup,
 } from "./firebase";
@@ -155,12 +156,11 @@ export async function sendVerificationEmail(): Promise<void> {
   }
 
   showLoaderBar();
-  const response = await Ape.users.verificationEmail();
-  if (response.status !== 200) {
-    hideLoaderBar();
-    showErrorNotification("Failed to request verification email", { response });
+  const { error } = await tryCatch(authSendEmailVerification());
+  hideLoaderBar();
+  if (error) {
+    showErrorNotification("Failed to request verification email", { error });
   } else {
-    hideLoaderBar();
     showSuccessNotification("Verification email sent");
   }
 }

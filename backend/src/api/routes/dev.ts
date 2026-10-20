@@ -12,8 +12,4 @@ export default s.router(devContract, {
     middleware: [onlyAvailableOnDev()],
     handler: async (r) => callController(DevController.createTestData)(r),
   },
-  addDebugInboxItem: {
-    middleware: [onlyAvailableOnDev()],
-    handler: async (r) => callController(DevController.addDebugInboxItem)(r),
-  },
 });

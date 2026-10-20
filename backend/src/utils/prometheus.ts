@@ -24,12 +24,6 @@ const result = new Counter({
   ],
 });
 
-const dailyLb = new Counter({
-  name: "daily_leaderboard_update_total",
-  help: "Counts daily leaderboard updates",
-  labelNames: ["mode", "mode2", "language"],
-});
-
 const resultLanguage = new Counter({
   name: "result_language_total",
   help: "Counts result langauge",
@@ -68,28 +62,8 @@ const resultDuration = new Histogram({
   ],
 });
 
-const leaderboardUpdate = new Gauge({
-  name: "leaderboard_update_seconds",
-  help: "Leaderboard update time",
-  labelNames: ["language", "mode", "mode2", "step"],
-});
-
-export function incrementAuth(
-  type: "Bearer" | "ApeKey" | "None" | "GithubWebhook",
-): void {
+export function incrementAuth(type: "Bearer" | "None" | "GithubWebhook"): void {
   auth.inc({ type });
-}
-
-export function setLeaderboard(
-  language: string,
-  mode: string,
-  mode2: string,
-  times: [number, number, number, number],
-): void {
-  leaderboardUpdate.set({ language, mode, mode2, step: "aggregate" }, times[0]);
-  leaderboardUpdate.set({ language, mode, mode2, step: "loop" }, times[1]);
-  leaderboardUpdate.set({ language, mode, mode2, step: "insert" }, times[2]);
-  leaderboardUpdate.set({ language, mode, mode2, step: "index" }, times[3]);
 }
 
 export function incrementResult(res: CompletedEvent, isPb?: boolean): void {
@@ -150,14 +124,6 @@ export function incrementResult(res: CompletedEvent, isPb?: boolean): void {
   );
 
   resultDuration.observe(res.testDuration);
-}
-
-export function incrementDailyLeaderboard(
-  mode: string,
-  mode2: string,
-  language: string,
-): void {
-  dailyLb.inc({ mode, mode2, language });
 }
 
 const clientVersionsCounter = new Counter({
@@ -298,49 +264,4 @@ const collectionSize = new Gauge({
 
 export function setCollectionSize(collection: string, size: number): void {
   collectionSize.set({ collection }, size);
-}
-
-const queueLength = new Gauge({
-  name: "queue_length",
-  help: "Length of the queues",
-  labelNames: ["queueName", "countType"],
-});
-
-export function setQueueLength(
-  queueName: string,
-  countType: string,
-  length: number,
-): void {
-  queueLength.set({ queueName, countType }, length);
-}
-
-const emailCount = new Counter({
-  name: "email_count",
-  help: "Emails sent by the server",
-  labelNames: ["type", "status"],
-});
-
-export function recordEmail(type: string, status: string): void {
-  emailCount.inc({ type, status });
-}
-
-const timeToCompleteJobTotal = new Counter({
-  name: "time_to_complete_job_total",
-  help: "Time to complete a job total",
-  labelNames: ["queueName", "jobName"],
-});
-
-const timeToCompleteJobCount = new Counter({
-  name: "time_to_complete_job_count",
-  help: "Time to complete a job count",
-  labelNames: ["queueName", "jobName"],
-});
-
-export function recordTimeToCompleteJob(
-  queueName: string,
-  jobName: string,
-  time: number,
-): void {
-  timeToCompleteJobTotal.inc({ queueName, jobName }, time);
-  timeToCompleteJobCount.inc({ queueName, jobName });
 }

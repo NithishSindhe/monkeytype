@@ -3,10 +3,7 @@ import { setup } from "../../__testData__/controller-test";
 import * as Configuration from "../../../src/init/configuration";
 import * as ResultDal from "../../../src/dal/result";
 import * as UserDal from "../../../src/dal/user";
-import * as PublicDal from "../../../src/dal/public";
-import * as LogsDal from "../../../src/dal/logs";
 import { ObjectId } from "mongodb";
-import { mockAuthenticateWithApeKey } from "../../__testData__/auth";
 import { enableRateLimitExpects } from "../../__testData__/rate-limit";
 import { DBResult } from "../../../src/utils/result";
 import { omit } from "../../../src/utils/misc";
@@ -17,14 +14,6 @@ const configuration = Configuration.getCachedConfiguration();
 enableRateLimitExpects();
 
 describe("result controller test", () => {
-  const addLogMock = vi.spyOn(LogsDal, "addLog");
-  const addImportantLogMock = vi.spyOn(LogsDal, "addImportantLog");
-
-  beforeEach(() => {
-    addLogMock.mockClear().mockResolvedValue();
-    addImportantLogMock.mockClear().mockResolvedValue();
-  });
-
   describe("getResults", () => {
     const resultMock = vi.spyOn(ResultDal, "getResults");
 
@@ -58,18 +47,6 @@ describe("result controller test", () => {
         { ...resultOne, _id: resultOne._id.toHexString() },
         { ...resultTwo, _id: resultTwo._id.toHexString() },
       ]);
-    });
-    it("should get results with ape key", async () => {
-      //GIVEN
-      await acceptApeKeys(true);
-      const apeKey = await mockAuthenticateWithApeKey(uid, await configuration);
-
-      //WHEN
-      await mockApp
-        .get("/results")
-        .set("Authorization", `ApeKey ${apeKey}`)
-        .send()
-        .expect(200);
     });
     it("should get latest 1000 results for regular user", async () => {
       //WHEN
@@ -285,16 +262,6 @@ describe("result controller test", () => {
         mockApp.get("/results").set("Authorization", `Bearer ${uid}`),
       ).toBeRateLimited({ max: 60, windowMs: 60 * 60 * 1000 });
     });
-    it("should be rate limited for ape keys", async () => {
-      //GIVEN
-      await acceptApeKeys(true);
-      const apeKey = await mockAuthenticateWithApeKey(uid, await configuration);
-
-      //WHEN
-      await expect(
-        mockApp.get("/results").set("Authorization", `ApeKey ${apeKey}`),
-      ).toBeRateLimited({ max: 30, windowMs: 24 * 60 * 60 * 1000 });
-    });
   });
   describe("getResultById", () => {
     const getResultMock = vi.spyOn(ResultDal, "getResult");
@@ -319,38 +286,6 @@ describe("result controller test", () => {
       expect(body.message).toEqual("Result retrieved");
       expect(body.data).toEqual({ ...result, _id: result._id.toHexString() });
     });
-    it("should get last result with ape key", async () => {
-      //GIVEN
-      await acceptApeKeys(true);
-      const apeKey = await mockAuthenticateWithApeKey(uid, await configuration);
-      const result = givenDbResult(uid);
-      getResultMock.mockResolvedValue(result);
-
-      //WHEN
-      await mockApp
-        .get(`/results/id/${result._id}`)
-        .set("Authorization", `ApeKey ${apeKey}`)
-        .send()
-        .expect(200);
-    });
-    it("should rate limit get  result with ape key", async () => {
-      //GIVEN
-      const result = givenDbResult(uid, {
-        charStats: undefined,
-        incorrectChars: 5,
-        correctChars: 12,
-      });
-      getResultMock.mockResolvedValue(result);
-      await acceptApeKeys(true);
-      const apeKey = await mockAuthenticateWithApeKey(uid, await configuration);
-
-      //WHEN
-      await expect(
-        mockApp
-          .get(`/results/id/${result._id}`)
-          .set("Authorization", `ApeKey ${apeKey}`),
-      ).toBeRateLimited({ max: 60, windowMs: 60 * 60 * 1000 });
-    });
   });
   describe("getLastResult", () => {
     const getLastResultMock = vi.spyOn(ResultDal, "getLastResult");
@@ -374,36 +309,6 @@ describe("result controller test", () => {
       //THEN
       expect(body.message).toEqual("Result retrieved");
       expect(body.data).toEqual({ ...result, _id: result._id.toHexString() });
-    });
-    it("should get last result with ape key", async () => {
-      //GIVEN
-      await acceptApeKeys(true);
-      const apeKey = await mockAuthenticateWithApeKey(uid, await configuration);
-      const result = givenDbResult(uid);
-      getLastResultMock.mockResolvedValue(result);
-
-      //WHEN
-      await mockApp
-        .get("/results/last")
-        .set("Authorization", `ApeKey ${apeKey}`)
-        .send()
-        .expect(200);
-    });
-    it("should rate limit get last result with ape key", async () => {
-      //GIVEN
-      const result = givenDbResult(uid, {
-        charStats: undefined,
-        incorrectChars: 5,
-        correctChars: 12,
-      });
-      getLastResultMock.mockResolvedValue(result);
-      await acceptApeKeys(true);
-      const apeKey = await mockAuthenticateWithApeKey(uid, await configuration);
-
-      //WHEN
-      await expect(
-        mockApp.get("/results/last").set("Authorization", `ApeKey ${apeKey}`),
-      ).toBeRateLimited({ max: 30, windowMs: 60 * 1000 }); //should use defaultApeRateLimit
     });
   });
   describe("updateTags", () => {
@@ -557,7 +462,6 @@ describe("result controller test", () => {
       ResultDal,
       "getLastResultTimestamp",
     );
-    const publicUpdateStatsMock = vi.spyOn(PublicDal, "updateStats");
 
     beforeEach(async () => {
       await enableResultsSaving(true);
@@ -572,7 +476,6 @@ describe("result controller test", () => {
         userUpdateTypingStatsMock,
         resultAddMock,
         resultGetLastTimestampMock,
-        publicUpdateStatsMock,
       ].forEach((it) => it.mockClear());
 
       userGetMock.mockResolvedValue({ name: "bob" } as any);
@@ -653,11 +556,6 @@ describe("result controller test", () => {
         }),
       );
 
-      expect(publicUpdateStatsMock).toHaveBeenCalledWith(
-        4,
-        15.1 + 2 - 5, //duration + incompleteTestSeconds-afk
-      );
-      expect(userIncrementXpMock).toHaveBeenCalledWith(uid, 0);
       expect(userUpdateTypingStatsMock).toHaveBeenCalledWith(
         uid,
         4,
@@ -837,18 +735,6 @@ function givenDbResult(uid: string, customize?: Partial<DBResult>): DBResult {
     name: "testName",
     ...customize,
   };
-}
-
-async function acceptApeKeys(enabled: boolean): Promise<void> {
-  const mockConfig = await configuration;
-  mockConfig.apeKeys = {
-    ...mockConfig.apeKeys,
-    acceptKeys: enabled,
-  };
-
-  vi.spyOn(Configuration, "getCachedConfiguration").mockResolvedValue(
-    mockConfig,
-  );
 }
 
 async function enableResultsSaving(enabled: boolean): Promise<void> {

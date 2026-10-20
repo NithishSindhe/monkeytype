@@ -13,36 +13,21 @@ import * as Configuration from "../../../src/init/configuration";
 import { generateCurrentTestActivity } from "../../../src/api/controllers/user";
 import * as UserDal from "../../../src/dal/user";
 import * as AuthUtils from "../../../src/utils/auth";
-import * as BlocklistDal from "../../../src/dal/blocklist";
 import * as PresetDal from "../../../src/dal/preset";
 import * as ConfigDal from "../../../src/dal/config";
 import * as ResultDal from "../../../src/dal/result";
-import * as ReportDal from "../../../src/dal/report";
-import * as DailyLeaderboards from "../../../src/utils/daily-leaderboards";
-import * as LeaderboardDal from "../../../src/dal/leaderboards";
-import GeorgeQueue from "../../../src/queues/george-queue";
-import * as DiscordUtils from "../../../src/utils/discord";
 import * as Captcha from "../../../src/utils/captcha";
-import * as FirebaseAdmin from "../../../src/init/firebase-admin";
-import * as ApeKeysDal from "../../../src/dal/ape-keys";
-import * as LogDal from "../../../src/dal/logs";
 import { ObjectId } from "mongodb";
 import { PersonalBest } from "@monkeytype/schemas/shared";
-import { mockAuthenticateWithApeKey } from "../../__testData__/auth";
-import { randomUUID } from "node:crypto";
-import { MonkeyMail, UserStreak } from "@monkeytype/schemas/users";
-import MonkeyError, { isFirebaseError } from "../../../src/utils/error";
-import * as WeeklyXpLeaderboard from "../../../src/services/weekly-xp-leaderboard";
-import * as ConnectionsDal from "../../../src/dal/connections";
+import { UserStreak } from "@monkeytype/schemas/users";
+import { isFirebaseError } from "../../../src/utils/error";
 import { pb } from "../../__testData__/users";
-import Test from "supertest/lib/test";
 
 const { mockApp, uid, mockAuth } = setup();
 const configuration = Configuration.getCachedConfiguration();
 
 describe("user controller test", () => {
   describe("user signup", () => {
-    const blocklistContainsMock = vi.spyOn(BlocklistDal, "contains");
     const firebaseDeleteUserMock = vi.spyOn(AuthUtils, "deleteUser");
     const usernameAvailableMock = vi.spyOn(UserDal, "isNameAvailable");
     const verifyCaptchaMock = vi.spyOn(Captcha, "verify");
@@ -51,42 +36,9 @@ describe("user controller test", () => {
       usernameAvailableMock.mockResolvedValue(true);
     });
     afterEach(() => {
-      [
-        blocklistContainsMock,
-        firebaseDeleteUserMock,
-        usernameAvailableMock,
-      ].forEach((it) => it.mockClear());
-    });
-
-    it("should fail if blocklisted", async () => {
-      //GIVEN
-      blocklistContainsMock.mockResolvedValue(true);
-      firebaseDeleteUserMock.mockResolvedValue();
-
-      const newUser = {
-        name: "NewUser",
-        uid: uid,
-        email: "newuser@mail.com",
-        captcha: "captcha",
-      };
-
-      //WHEN
-      const result = await mockApp
-        .post("/users/signup")
-        .set("Authorization", `Bearer ${uid}`)
-        .send(newUser)
-        .expect(409);
-
-      //THEN
-      expect(result.body.message).toEqual("Username or email blocked");
-      expect(blocklistContainsMock).toHaveBeenCalledWith({
-        name: "NewUser",
-        email: "newuser@mail.com",
-      });
-
-      //user will be created in firebase from the frontend, make sure we remove it
-      expect(firebaseDeleteUserMock).toHaveBeenCalledWith(uid);
-      expect(verifyCaptchaMock).toHaveBeenCalledWith("captcha");
+      [firebaseDeleteUserMock, usernameAvailableMock].forEach((it) =>
+        it.mockClear(),
+      );
     });
 
     it("should fail if domain is blacklisted", async () => {
@@ -283,231 +235,6 @@ describe("user controller test", () => {
         .expect(422);
     });
   });
-  describe("sendVerificationEmail", () => {
-    const adminGetUserMock = vi.fn();
-    const adminGenerateVerificationLinkMock = vi.fn();
-    const getPartialUserMock = vi.spyOn(UserDal, "getPartialUser");
-
-    vi.spyOn(FirebaseAdmin, "default").mockReturnValue({
-      auth: () => ({
-        getUser: adminGetUserMock,
-        generateEmailVerificationLink: adminGenerateVerificationLinkMock,
-      }),
-    } as any);
-
-    vi.mock("../../../src/queues/email-queue", () => ({
-      __esModule: true,
-      default: { sendVerificationEmail: vi.fn() },
-    }));
-
-    beforeEach(() => {
-      adminGetUserMock.mockClear().mockResolvedValue({ emailVerified: false });
-      getPartialUserMock.mockClear().mockResolvedValue({
-        uid,
-        name: "Bob",
-        email: "newuser@mail.com",
-      } as any);
-    });
-
-    it("should send verfification email", async () => {
-      //GIVEN
-
-      //"HEN
-      const { body } = await mockApp
-        .get("/users/verificationEmail")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Email sent",
-        data: null,
-      });
-
-      expect(adminGetUserMock).toHaveBeenCalledWith(uid);
-      expect(getPartialUserMock).toHaveBeenCalledWith(
-        uid,
-        "request verification email",
-        ["uid", "name", "email"],
-      );
-      expect(adminGenerateVerificationLinkMock).toHaveBeenCalledWith(
-        "newuser@mail.com",
-        { url: "http://localhost:3000" },
-      );
-    });
-    it("should fail with missing firebase user", async () => {
-      //GIVEN
-      adminGetUserMock.mockRejectedValue(new Error("test"));
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/verificationEmail")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(500);
-
-      //THEN
-      expect(body.message).toContain(
-        "Auth user not found, even though the token got decoded",
-      );
-    });
-    it("should fail with already verified email", async () => {
-      //GIVEN
-      adminGetUserMock.mockResolvedValue({ emailVerified: true });
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/verificationEmail")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(400);
-
-      //THEN
-      expect(body.message).toEqual("Email already verified");
-    });
-    it("should fail with email not matching the one from the authentication", async () => {
-      //GIVEN
-      getPartialUserMock.mockResolvedValue({
-        email: "nonmatching@example.com",
-      } as any);
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/verificationEmail")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(400);
-
-      //THEN
-      expect(body.message).toEqual(
-        "Authenticated email does not match the email found in the database. This might happen if you recently changed your email. Please refresh and try again.",
-      );
-    });
-
-    it("should fail with too many firebase requests", async () => {
-      //GIVEN
-      const mockFirebaseError = {
-        code: "auth/too-many-requests",
-        codePrefix: "auth",
-        errorInfo: {
-          code: "auth/too-many-requests",
-          message: "Too many requests",
-        },
-      };
-      adminGenerateVerificationLinkMock.mockRejectedValue(mockFirebaseError);
-      expect(isFirebaseError(mockFirebaseError)).toBe(true);
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/verificationEmail")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(429);
-
-      //THEN
-      expect(body.message).toEqual("Too many requests. Please try again later");
-    });
-    it("should fail with firebase user not found", async () => {
-      //GIVEN
-      const mockFirebaseError = {
-        code: "auth/user-not-found",
-        codePrefix: "auth",
-        errorInfo: {
-          code: "auth/user-not-found",
-          message: "User not found",
-        },
-      };
-      adminGenerateVerificationLinkMock.mockRejectedValue(mockFirebaseError);
-      expect(isFirebaseError(mockFirebaseError)).toBe(true);
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/verificationEmail")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(500);
-
-      //THEN
-      expect(body.message).toEqual(
-        "Auth user not found when the user was found in the database. Contact support with this error message and your email\n" +
-          'Stack: {"decodedTokenEmail":"newuser@mail.com","userInfoEmail":"newuser@mail.com"}',
-      );
-    });
-    it("should fail with unknown error", async () => {
-      //GIVEN
-      const mockFirebaseError = {
-        message: "Internal server error",
-      };
-      adminGenerateVerificationLinkMock.mockRejectedValue(mockFirebaseError);
-      expect(isFirebaseError(mockFirebaseError)).toBe(false);
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/verificationEmail")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(500);
-
-      //THEN
-      expect(body.message).toEqual(
-        "Failed to generate an email verification link: Internal server error",
-      );
-    });
-  });
-  describe("sendForgotPasswordEmail", () => {
-    const sendForgotPasswordEmailMock = vi.spyOn(
-      AuthUtils,
-      "sendForgotPasswordEmail",
-    );
-    const verifyCaptchaMock = vi.spyOn(Captcha, "verify");
-
-    beforeEach(() => {
-      sendForgotPasswordEmailMock.mockClear().mockResolvedValue();
-      verifyCaptchaMock.mockClear().mockResolvedValue(true);
-    });
-
-    it("should send forgot password email without authentication", async () => {
-      //GIVEN
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/forgotPasswordEmail")
-        .send({ email: "bob@example.com", captcha: "" });
-
-      //THEN
-      expect(body).toEqual({
-        message:
-          "Password reset request received. If the email is valid, you will receive an email shortly.",
-        data: null,
-      });
-
-      expect(sendForgotPasswordEmailMock).toHaveBeenCalledWith(
-        "bob@example.com",
-      );
-    });
-    it("should fail without mandatory properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/forgotPasswordEmail")
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: ['"captcha" Required', '"email" Required'],
-      });
-    });
-    it("should fail without unknown properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/forgotPasswordEmail")
-        .send({ email: "bob@example.com", extra: "value" })
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: [
-          '"captcha" Required',
-          "Unrecognized key(s) in object: 'extra'",
-        ],
-      });
-    });
-  });
   describe("getTestActivity", () => {
     const getUserMock = vi.spyOn(UserDal, "getPartialUser");
     afterAll(() => {
@@ -616,39 +343,18 @@ describe("user controller test", () => {
     });
   });
   describe("delete user ", () => {
-    const getUserMock = vi.spyOn(UserDal, "getPartialUser");
     const deleteUserMock = vi.spyOn(UserDal, "deleteUser");
     const firebaseDeleteUserMock = vi.spyOn(AuthUtils, "deleteUser");
-    const deleteAllApeKeysMock = vi.spyOn(ApeKeysDal, "deleteAllApeKeys");
     const deleteAllPresetsMock = vi.spyOn(PresetDal, "deleteAllPresets");
     const deleteConfigMock = vi.spyOn(ConfigDal, "deleteConfig");
     const deleteAllResultMock = vi.spyOn(ResultDal, "deleteAll");
-    const purgeUserFromDailyLeaderboardsMock = vi.spyOn(
-      DailyLeaderboards,
-      "purgeUserFromDailyLeaderboards",
-    );
-    const purgeUserFromXpLeaderboardsMock = vi.spyOn(
-      WeeklyXpLeaderboard,
-      "purgeUserFromXpLeaderboards",
-    );
-    const blocklistAddMock = vi.spyOn(BlocklistDal, "add");
-    const connectionsDeletebyUidMock = vi.spyOn(ConnectionsDal, "deleteByUid");
-    const logsDeleteUserMock = vi.spyOn(LogDal, "deleteUserLogs");
-    const georgeUnlinkDiscordMock = vi.spyOn(GeorgeQueue, "unlinkDiscord");
 
     beforeEach(() => {
       [
         firebaseDeleteUserMock,
         deleteUserMock,
-        blocklistAddMock,
-        deleteAllApeKeysMock,
         deleteAllPresetsMock,
         deleteConfigMock,
-        purgeUserFromDailyLeaderboardsMock,
-        purgeUserFromXpLeaderboardsMock,
-        connectionsDeletebyUidMock,
-        logsDeleteUserMock,
-        georgeUnlinkDiscordMock,
       ].forEach((it) => it.mockResolvedValue(undefined));
 
       deleteAllResultMock.mockResolvedValue({} as any);
@@ -656,33 +362,15 @@ describe("user controller test", () => {
 
     afterEach(() => {
       [
-        getUserMock,
         deleteUserMock,
-        blocklistAddMock,
         firebaseDeleteUserMock,
         deleteConfigMock,
         deleteAllResultMock,
-        deleteAllApeKeysMock,
         deleteAllPresetsMock,
-        purgeUserFromDailyLeaderboardsMock,
-        purgeUserFromXpLeaderboardsMock,
-        connectionsDeletebyUidMock,
-        logsDeleteUserMock,
-        georgeUnlinkDiscordMock,
       ].forEach((it) => it.mockClear());
     });
 
     it("should delete user", async () => {
-      //GIVEN
-      const user = {
-        uid,
-        name: "name",
-        email: "email",
-        discordId: "discordId",
-        banned: true,
-      } as Partial<UserDal.DBUser> as UserDal.DBUser;
-      getUserMock.mockResolvedValue(user);
-
       //WHEN
       await mockApp
         .delete("/users/")
@@ -690,116 +378,15 @@ describe("user controller test", () => {
         .expect(200);
 
       //THEN
-      expect(blocklistAddMock).toHaveBeenCalledWith(user);
-
       expect(deleteUserMock).toHaveBeenCalledWith(uid);
       expect(firebaseDeleteUserMock).toHaveBeenCalledWith(uid);
-      expect(deleteAllApeKeysMock).toHaveBeenCalledWith(uid);
       expect(deleteAllPresetsMock).toHaveBeenCalledWith(uid);
       expect(deleteConfigMock).toHaveBeenCalledWith(uid);
       expect(deleteAllResultMock).toHaveBeenCalledWith(uid);
-      expect(connectionsDeletebyUidMock).toHaveBeenCalledWith(uid);
-      expect(purgeUserFromDailyLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await configuration).dailyLeaderboards,
-      );
-      expect(purgeUserFromXpLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await configuration).leaderboards.weeklyXp,
-      );
-      expect(logsDeleteUserMock).toHaveBeenCalledWith(uid);
-      expect(georgeUnlinkDiscordMock).toHaveBeenCalledWith(user.discordId, uid);
     });
 
-    it("should delete user without adding to blocklist if not banned", async () => {
-      //GIVEN
-      const user = {
-        uid,
-        name: "name",
-        email: "email",
-        discordId: "discordId",
-      } as Partial<UserDal.DBUser> as UserDal.DBUser;
-      getUserMock.mockResolvedValue(user);
-
-      //WHEN
-      await mockApp
-        .delete("/users/")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(blocklistAddMock).not.toHaveBeenCalled();
-    });
-
-    it("should not fail if userInfo cannot be found", async () => {
-      //GIVEN
-      getUserMock.mockRejectedValue(new MonkeyError(404, "user not found"));
-
-      //WHEN
-      await mockApp
-        .delete("/users/")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(blocklistAddMock).not.toHaveBeenCalled();
-
-      expect(deleteUserMock).toHaveBeenCalledWith(uid);
-      expect(firebaseDeleteUserMock).toHaveBeenCalledWith(uid);
-      expect(deleteAllApeKeysMock).toHaveBeenCalledWith(uid);
-      expect(deleteAllPresetsMock).toHaveBeenCalledWith(uid);
-      expect(deleteConfigMock).toHaveBeenCalledWith(uid);
-      expect(deleteAllResultMock).toHaveBeenCalledWith(uid);
-      expect(connectionsDeletebyUidMock).toHaveBeenCalledWith(uid);
-      expect(purgeUserFromDailyLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await configuration).dailyLeaderboards,
-      );
-      expect(purgeUserFromXpLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await configuration).leaderboards.weeklyXp,
-      );
-      expect(logsDeleteUserMock).toHaveBeenCalledWith(uid);
-    });
-
-    it("should fail for unknown error from UserDal", async () => {
-      //GIVEN
-      getUserMock.mockRejectedValue(new Error("oops"));
-
-      //WHEN
-      await mockApp
-        .delete("/users/")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(500);
-
-      //THEN
-      expect(blocklistAddMock).not.toHaveBeenCalled();
-      expect(deleteUserMock).not.toHaveBeenCalledWith(uid);
-      expect(firebaseDeleteUserMock).not.toHaveBeenCalledWith(uid);
-      expect(deleteAllApeKeysMock).not.toHaveBeenCalledWith(uid);
-      expect(deleteAllPresetsMock).not.toHaveBeenCalledWith(uid);
-      expect(deleteConfigMock).not.toHaveBeenCalledWith(uid);
-      expect(deleteAllResultMock).not.toHaveBeenCalledWith(uid);
-      expect(connectionsDeletebyUidMock).not.toHaveBeenCalledWith(uid);
-      expect(purgeUserFromDailyLeaderboardsMock).not.toHaveBeenCalledWith(
-        uid,
-        (await configuration).dailyLeaderboards,
-      );
-      expect(purgeUserFromXpLeaderboardsMock).not.toHaveBeenCalledWith(
-        uid,
-        (await configuration).leaderboards.weeklyXp,
-      );
-      expect(logsDeleteUserMock).not.toHaveBeenCalled();
-    });
     it("should not fail if firebase user cannot be found", async () => {
       //GIVEN
-      const user = {
-        uid,
-        name: "name",
-        email: "email",
-        discordId: "discordId",
-      } as Partial<UserDal.DBUser> as UserDal.DBUser;
-      getUserMock.mockResolvedValue(user);
       firebaseDeleteUserMock.mockRejectedValue({
         code: "user-not-found",
         codePrefix: "auth",
@@ -813,35 +400,15 @@ describe("user controller test", () => {
         .expect(200);
 
       //THEN
-      expect(blocklistAddMock).not.toHaveBeenCalled();
-
       expect(deleteUserMock).toHaveBeenCalledWith(uid);
       expect(firebaseDeleteUserMock).toHaveBeenCalledWith(uid);
-      expect(deleteAllApeKeysMock).toHaveBeenCalledWith(uid);
       expect(deleteAllPresetsMock).toHaveBeenCalledWith(uid);
       expect(deleteConfigMock).toHaveBeenCalledWith(uid);
       expect(deleteAllResultMock).toHaveBeenCalledWith(uid);
-      expect(connectionsDeletebyUidMock).toHaveBeenCalledWith(uid);
-      expect(purgeUserFromDailyLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await configuration).dailyLeaderboards,
-      );
-      expect(purgeUserFromXpLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await configuration).leaderboards.weeklyXp,
-      );
-      expect(logsDeleteUserMock).toHaveBeenCalledWith(uid);
     });
 
     it("should fail for unknown error from firebase", async () => {
       //GIVEN
-      const user = {
-        uid,
-        name: "name",
-        email: "email",
-        discordId: "discordId",
-      } as Partial<UserDal.DBUser> as UserDal.DBUser;
-      getUserMock.mockResolvedValue(user);
       firebaseDeleteUserMock.mockRejectedValue({
         code: "unknown",
         codePrefix: "auth",
@@ -855,60 +422,16 @@ describe("user controller test", () => {
         .expect(500);
 
       //THEN
-      expect(blocklistAddMock).not.toHaveBeenCalled();
       expect(deleteUserMock).toHaveBeenCalledWith(uid);
       expect(firebaseDeleteUserMock).toHaveBeenCalledWith(uid);
-      expect(deleteAllApeKeysMock).toHaveBeenCalledWith(uid);
-      expect(deleteAllPresetsMock).toHaveBeenCalledWith(uid);
-      expect(deleteConfigMock).toHaveBeenCalledWith(uid);
-      expect(deleteAllResultMock).toHaveBeenCalledWith(uid);
-      expect(connectionsDeletebyUidMock).toHaveBeenCalledWith(uid);
-      expect(purgeUserFromDailyLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await configuration).dailyLeaderboards,
-      );
-      expect(purgeUserFromXpLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await configuration).leaderboards.weeklyXp,
-      );
-    });
-    it("should not unlink user without discordId", async () => {
-      //GIVEN
-      const user = {
-        uid,
-        name: "name",
-        email: "email",
-      } as Partial<UserDal.DBUser> as UserDal.DBUser;
-      getUserMock.mockResolvedValue(user);
-
-      //WHEN
-      await mockApp
-        .delete("/users/")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(georgeUnlinkDiscordMock).not.toHaveBeenCalled();
     });
   });
   describe("resetUser", () => {
     const getPartialUserMock = vi.spyOn(UserDal, "getPartialUser");
     const resetUserMock = vi.spyOn(UserDal, "resetUser");
-    const deleteAllApeKeysMock = vi.spyOn(ApeKeysDal, "deleteAllApeKeys");
     const deleteAllPresetsMock = vi.spyOn(PresetDal, "deleteAllPresets");
     const deleteAllResultsMock = vi.spyOn(ResultDal, "deleteAll");
     const deleteConfigMock = vi.spyOn(ConfigDal, "deleteConfig");
-    const purgeUserFromDailyLeaderboardsMock = vi.spyOn(
-      DailyLeaderboards,
-      "purgeUserFromDailyLeaderboards",
-    );
-    const purgeUserFromXpLeaderboardsMock = vi.spyOn(
-      WeeklyXpLeaderboard,
-      "purgeUserFromXpLeaderboards",
-    );
-
-    const unlinkDiscordMock = vi.spyOn(GeorgeQueue, "unlinkDiscord");
-    const addImportantLogMock = vi.spyOn(LogDal, "addImportantLog");
 
     beforeEach(() => {
       getPartialUserMock.mockClear().mockResolvedValue({
@@ -917,21 +440,12 @@ describe("user controller test", () => {
         email: "bob@example.com",
       } as any);
       deleteAllResultsMock.mockClear().mockResolvedValue(null as any);
-      [
-        purgeUserFromXpLeaderboardsMock,
-        unlinkDiscordMock,
-        addImportantLogMock,
-        resetUserMock,
-        deleteAllApeKeysMock,
-        deleteAllPresetsMock,
-        deleteConfigMock,
-        purgeUserFromDailyLeaderboardsMock,
-      ].forEach((it) => it.mockClear().mockResolvedValue());
+      [resetUserMock, deleteAllPresetsMock, deleteConfigMock].forEach((it) =>
+        it.mockClear().mockResolvedValue(),
+      );
     });
 
     it("should reset user", async () => {
-      //GIVEN
-
       //WHEN
       const { body } = await mockApp
         .patch("/users/reset")
@@ -946,42 +460,12 @@ describe("user controller test", () => {
 
       for (const it of [
         resetUserMock,
-        deleteAllApeKeysMock,
         deleteAllPresetsMock,
         deleteAllResultsMock,
         deleteConfigMock,
       ]) {
         expect(it).toHaveBeenCalledWith(uid);
       }
-      expect(purgeUserFromDailyLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await Configuration.getLiveConfiguration()).dailyLeaderboards,
-      );
-      expect(purgeUserFromXpLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await configuration).leaderboards.weeklyXp,
-      );
-      expect(unlinkDiscordMock).not.toHaveBeenCalled();
-      /*TODO
-      expect(addImportantLogMock).toHaveBeenCalledWith(
-        "user_reset",
-        "bob@example.com bob",
-        uid
-      );*/
-    });
-    it("should unlink discord", async () => {
-      //GIVEN
-      getPartialUserMock.mockResolvedValue({ discordId: "discordId" } as any);
-
-      //WHEN
-      await mockApp
-        .patch("/users/reset")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      //TODO
-      //expect(unlinkDiscordMock).toHaveBeenCalledWith("discordId", uid);
     });
     it("should fail resetting a banned user", async () => {
       //GIVEN
@@ -998,20 +482,11 @@ describe("user controller test", () => {
     });
   });
   describe("update name", () => {
-    const blocklistContainsMock = vi.spyOn(BlocklistDal, "contains");
     const getPartialUserMock = vi.spyOn(UserDal, "getPartialUser");
     const updateNameMock = vi.spyOn(UserDal, "updateName");
-    const connectionsUpdateNameMock = vi.spyOn(ConnectionsDal, "updateName");
-    const addImportantLogMock = vi.spyOn(LogDal, "addImportantLog");
 
     beforeEach(() => {
-      [
-        blocklistContainsMock,
-        getPartialUserMock,
-        updateNameMock,
-        connectionsUpdateNameMock,
-        addImportantLogMock,
-      ].forEach((it) => {
+      [getPartialUserMock, updateNameMock].forEach((it) => {
         it.mockClear().mockResolvedValue(null as never);
       });
     });
@@ -1036,29 +511,6 @@ describe("user controller test", () => {
       });
 
       expect(updateNameMock).toHaveBeenCalledWith(uid, "newName", "Bob");
-      expect(addImportantLogMock).toHaveBeenCalledWith(
-        "user_name_updated",
-        "changed name from Bob to newName",
-        uid,
-      );
-      expect(connectionsUpdateNameMock).toHaveBeenCalledWith(uid, "newName");
-    });
-
-    it("should fail if username is blocked", async () => {
-      //GIVEN
-      blocklistContainsMock.mockResolvedValue(true);
-
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/name")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({ name: "newName" })
-        .expect(409);
-
-      //THEN
-      expect(body.message).toEqual("Username blocked");
-      expect(updateNameMock).not.toHaveBeenCalled();
-      expect(connectionsUpdateNameMock).not.toHaveBeenCalled();
     });
 
     it("should fail for banned users", async () => {
@@ -1163,23 +615,12 @@ describe("user controller test", () => {
   });
   describe("clear PBs", () => {
     const clearPbMock = vi.spyOn(UserDal, "clearPb");
-    const purgeUserFromDailyLeaderboardsMock = vi.spyOn(
-      DailyLeaderboards,
-      "purgeUserFromDailyLeaderboards",
-    );
-    const addImportantLogMock = vi.spyOn(LogDal, "addImportantLog");
 
     beforeEach(() => {
-      [
-        clearPbMock,
-        purgeUserFromDailyLeaderboardsMock,
-        addImportantLogMock,
-      ].forEach((it) => it.mockClear().mockResolvedValue());
+      clearPbMock.mockClear().mockResolvedValue();
     });
 
     it("should clear pb", async () => {
-      //GIVEN
-
       //WHEN
       const { body } = await mockApp
         .delete("/users/personalBests")
@@ -1192,79 +633,15 @@ describe("user controller test", () => {
         data: null,
       });
       expect(clearPbMock).toHaveBeenCalledWith(uid);
-      expect(purgeUserFromDailyLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await Configuration.getLiveConfiguration()).dailyLeaderboards,
-      );
-      expect(addImportantLogMock).toHaveBeenCalledWith(
-        "user_cleared_pbs",
-        "",
-        uid,
-      );
     });
-  });
-  describe("opt out of leaderboard", () => {
-    const optOutOfLeaderboardsMock = vi.spyOn(UserDal, "optOutOfLeaderboards");
-    const purgeUserFromDailyLeaderboardsMock = vi.spyOn(
-      DailyLeaderboards,
-      "purgeUserFromDailyLeaderboards",
-    );
-    const addImportantLogMock = vi.spyOn(LogDal, "addImportantLog");
-
-    beforeEach(() => {
-      [
-        optOutOfLeaderboardsMock.mockClear(),
-        purgeUserFromDailyLeaderboardsMock,
-        addImportantLogMock,
-      ].forEach((it) => it.mockClear().mockResolvedValue());
-    });
-    it("should opt out", async () => {
-      //GIVEN
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/optOutOfLeaderboards")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "User opted out of leaderboards",
-        data: null,
-      });
-
-      expect(optOutOfLeaderboardsMock).toHaveBeenCalledWith(uid);
-      expect(purgeUserFromDailyLeaderboardsMock).toHaveBeenCalledWith(
-        uid,
-        (await Configuration.getLiveConfiguration()).dailyLeaderboards,
-      );
-      expect(addImportantLogMock).toHaveBeenCalledWith(
-        "user_opted_out_of_leaderboards",
-        "",
-        uid,
-      );
-    });
-    // it("should fail with unknown properties", async () => {
-    //WHEN
-    // const { body } = await mockApp
-    //   .post("/users/optOutOfLeaderboards")
-    //   .set("Authorization", `Bearer ${uid}`)
-    //   .send({ extra: "value" });
-    //TODO.expect(422);
-    //THEN
-    /* TODO:
-        expect(body).toEqual({});
-        */
-    // });
   });
   describe("update email", () => {
     const authUpdateEmailMock = vi.spyOn(AuthUtils, "updateUserEmail");
     const userUpdateEmailMock = vi.spyOn(UserDal, "updateEmail");
-    const addImportantLogMock = vi.spyOn(LogDal, "addImportantLog");
 
     beforeEach(() => {
-      [authUpdateEmailMock, userUpdateEmailMock, addImportantLogMock].forEach(
-        (it) => it.mockClear().mockResolvedValue(null as never),
+      [authUpdateEmailMock, userUpdateEmailMock].forEach((it) =>
+        it.mockClear().mockResolvedValue(null as never),
       );
     });
     it("should update users email", async () => {
@@ -1291,11 +668,6 @@ describe("user controller test", () => {
       expect(userUpdateEmailMock).toHaveBeenCalledWith(
         uid,
         newEmail.toLowerCase(),
-      );
-      expect(addImportantLogMock).toHaveBeenCalledWith(
-        "user_email_updated",
-        "changed email from previousemail@example.com to newemail@example.com",
-        uid,
       );
     });
     it("should fail for duplicate email", async () => {
@@ -1544,395 +916,6 @@ describe("user controller test", () => {
           '"newPassword" String must contain at least 6 character(s)',
         ],
       });
-    });
-  });
-  describe("get oauth link", () => {
-    const getOauthLinkMock = vi.spyOn(DiscordUtils, "getOauthLink");
-    const url = "http://example.com:1234?test";
-    beforeEach(async () => {
-      await enableDiscordIntegration(true);
-      getOauthLinkMock.mockClear().mockResolvedValue(url);
-    });
-
-    it("should get oauth link", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/discord/oauth")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Discord oauth link generated",
-        data: { url },
-      });
-      expect(getOauthLinkMock).toHaveBeenCalledWith(uid);
-    });
-    it("should fail if feature is not enabled", async () => {
-      //GIVEN
-      await enableDiscordIntegration(false);
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/discord/oauth")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(503);
-
-      //THEN
-      expect(body.message).toEqual(
-        "Discord integration is not available at this time",
-      );
-    });
-  });
-  describe("link discord", () => {
-    const getUserMock = vi.spyOn(UserDal, "getPartialUser");
-    const isDiscordIdAvailableMock = vi.spyOn(UserDal, "isDiscordIdAvailable");
-    const isStateValidForUserMock = vi.spyOn(
-      DiscordUtils,
-      "iStateValidForUser",
-    );
-    const getDiscordUserMock = vi.spyOn(DiscordUtils, "getDiscordUser");
-    const blocklistContainsMock = vi.spyOn(BlocklistDal, "contains");
-    const userLinkDiscordMock = vi.spyOn(UserDal, "linkDiscord");
-    const georgeLinkDiscordMock = vi.spyOn(GeorgeQueue, "linkDiscord");
-    const addImportantLogMock = vi.spyOn(LogDal, "addImportantLog");
-
-    beforeEach(async () => {
-      isStateValidForUserMock.mockResolvedValue(true);
-      getUserMock.mockResolvedValue({} as any);
-      getDiscordUserMock.mockResolvedValue({
-        id: "discordUserId",
-        avatar: "discordUserAvatar",
-      });
-      isDiscordIdAvailableMock.mockResolvedValue(true);
-      blocklistContainsMock.mockResolvedValue(false);
-      userLinkDiscordMock.mockResolvedValue();
-      await enableDiscordIntegration(true);
-    });
-    afterEach(() => {
-      [
-        getUserMock,
-        isStateValidForUserMock,
-        isDiscordIdAvailableMock,
-        getDiscordUserMock,
-        blocklistContainsMock,
-        userLinkDiscordMock,
-        georgeLinkDiscordMock,
-        addImportantLogMock,
-      ].forEach((it) => it.mockClear());
-    });
-
-    it("should link discord", async () => {
-      //GIVEN
-      getUserMock.mockResolvedValue({} as any);
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/discord/link")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          tokenType: "tokenType",
-          accessToken: "accessToken",
-          state: "statestatestatestate",
-        })
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Discord account linked",
-        data: {
-          discordId: "discordUserId",
-          discordAvatar: "discordUserAvatar",
-        },
-      });
-      expect(isStateValidForUserMock).toHaveBeenCalledWith(
-        "statestatestatestate",
-        uid,
-      );
-      expect(getUserMock).toHaveBeenCalledWith(
-        uid,
-        "link discord",
-        expect.any(Array),
-      );
-      expect(getDiscordUserMock).toHaveBeenCalledWith(
-        "tokenType",
-        "accessToken",
-      );
-      expect(isDiscordIdAvailableMock).toHaveBeenCalledWith("discordUserId");
-      expect(blocklistContainsMock).toHaveBeenCalledWith({
-        discordId: "discordUserId",
-      });
-      expect(userLinkDiscordMock).toHaveBeenCalledWith(
-        uid,
-        "discordUserId",
-        "discordUserAvatar",
-      );
-      expect(georgeLinkDiscordMock).toHaveBeenCalledWith(
-        "discordUserId",
-        uid,
-        false,
-      );
-      expect(addImportantLogMock).toHaveBeenCalledWith(
-        "user_discord_link",
-        "linked to discordUserId",
-        uid,
-      );
-    });
-
-    it("should update existing discord avatar", async () => {
-      //GIVEN
-      getUserMock.mockResolvedValue({ discordId: "existingDiscordId" } as any);
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/discord/link")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          tokenType: "tokenType",
-          accessToken: "accessToken",
-          state: "statestatestatestate",
-        })
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Discord avatar updated",
-        data: {
-          discordId: "discordUserId",
-          discordAvatar: "discordUserAvatar",
-        },
-      });
-      expect(userLinkDiscordMock).toHaveBeenCalledWith(
-        uid,
-        "existingDiscordId",
-        "discordUserAvatar",
-      );
-      expect(isDiscordIdAvailableMock).not.toHaveBeenCalled();
-      expect(blocklistContainsMock).not.toHaveBeenCalled();
-      expect(georgeLinkDiscordMock).not.toHaveBeenCalled();
-      expect(addImportantLogMock).not.toHaveBeenCalled();
-    });
-    it("should fail for user mismatch", async () => {
-      //GIVEN
-      isStateValidForUserMock.mockResolvedValue(false);
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/discord/link")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          tokenType: "tokenType",
-          accessToken: "accessToken",
-          state: "statestatestatestate",
-        })
-        .expect(403);
-
-      //THEN
-      expect(body.message).toEqual("Invalid user token");
-    });
-    it("should fail for banned users", async () => {
-      //GIVEN
-      getUserMock.mockResolvedValue({ banned: true } as any);
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/discord/link")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          tokenType: "tokenType",
-          accessToken: "accessToken",
-          state: "statestatestatestate",
-        })
-        .expect(403);
-
-      //THEN
-      expect(body.message).toEqual("Banned accounts cannot link with Discord");
-    });
-    it("should fail for unknown discordId", async () => {
-      //GIVEN
-      getDiscordUserMock.mockResolvedValue({} as any);
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/discord/link")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          tokenType: "tokenType",
-          accessToken: "accessToken",
-          state: "statestatestatestate",
-        })
-        .expect(500);
-
-      //THEN
-      expect(body.message).toEqual(
-        "Could not get Discord account info\nStack: discord id is undefined",
-      );
-
-      //THEN
-      expect(userLinkDiscordMock).not.toHaveBeenCalled();
-    });
-    it("should fail for already linked discordId", async () => {
-      //GIVEN
-      isDiscordIdAvailableMock.mockResolvedValue(false);
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/discord/link")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          tokenType: "tokenType",
-          accessToken: "accessToken",
-          state: "statestatestatestate",
-        })
-        .expect(409);
-
-      //THEN
-      expect(body.message).toEqual(
-        "This Discord account is linked to a different account",
-      );
-
-      //THEN
-      expect(userLinkDiscordMock).not.toHaveBeenCalled();
-    });
-
-    it("should fail if discordId is blocked", async () => {
-      //GIVEN
-      const user = {
-        uid,
-        name: "name",
-        email: "email",
-      } as Partial<UserDal.DBUser> as UserDal.DBUser;
-      getUserMock.mockResolvedValue(user);
-      blocklistContainsMock.mockResolvedValue(true);
-
-      //WHEN
-      const result = await mockApp
-        .post("/users/discord/link")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          tokenType: "tokenType",
-          accessToken: "accessToken",
-          state: "statestatestatestate",
-        })
-        .expect(409);
-
-      //THEN
-      expect(result.body.message).toEqual("The Discord account is blocked");
-
-      expect(blocklistContainsMock).toHaveBeenCalledWith({
-        discordId: "discordUserId",
-      });
-    });
-    it("should fail without mandatory properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/discord/link")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: [
-          '"tokenType" Required',
-          '"accessToken" Required',
-          '"state" Required',
-        ],
-      });
-    });
-    it("should fail with unknown properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/discord/link")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          tokenType: "tokenType",
-          accessToken: "accessToken",
-          state: "statestatestatestate",
-          extra: "value",
-        })
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: ["Unrecognized key(s) in object: 'extra'"],
-      });
-    });
-  });
-  describe("unlink discord", () => {
-    const getPartialUserMock = vi.spyOn(UserDal, "getPartialUser");
-    const userUnlinkDiscordMock = vi.spyOn(UserDal, "unlinkDiscord");
-    const georgeUnlinkDiscordMock = vi.spyOn(GeorgeQueue, "unlinkDiscord");
-    const addImportantLogMock = vi.spyOn(LogDal, "addImportantLog");
-
-    beforeEach(() => {
-      getPartialUserMock
-        .mockClear()
-        .mockResolvedValue({ discordId: "discordId" } as any);
-      [
-        userUnlinkDiscordMock,
-        georgeUnlinkDiscordMock,
-        addImportantLogMock,
-      ].forEach((it) => it.mockClear().mockResolvedValue());
-    });
-
-    it("should unlink", async () => {
-      //GIVEN
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/discord/unlink")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Discord account unlinked",
-        data: null,
-      });
-
-      expect(userUnlinkDiscordMock).toHaveBeenCalledWith(uid);
-      expect(georgeUnlinkDiscordMock).toHaveBeenCalledWith("discordId", uid);
-      expect(addImportantLogMock).toHaveBeenCalledWith(
-        "user_discord_unlinked",
-        "discordId",
-        uid,
-      );
-    });
-    it("should fail for banned user", async () => {
-      //GIVEN
-      getPartialUserMock.mockResolvedValue({ banned: true } as any);
-
-      //WHEN
-
-      const { body } = await mockApp
-        .post("/users/discord/unlink")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(403);
-
-      //THEN
-      expect(body.message).toEqual("Banned accounts cannot unlink Discord");
-      expect(userUnlinkDiscordMock).not.toHaveBeenCalled();
-      expect(georgeUnlinkDiscordMock).not.toHaveBeenCalled();
-    });
-    it("should fail for user without discord linked", async () => {
-      //GIVEN
-      getPartialUserMock.mockResolvedValue({ discordId: undefined } as any);
-
-      //WHEN
-
-      const { body } = await mockApp
-        .post("/users/discord/unlink")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(404);
-
-      //THEN
-      expect(body.message).toEqual(
-        "User does not have a linked Discord account",
-      );
-      expect(userUnlinkDiscordMock).not.toHaveBeenCalled();
-      expect(georgeUnlinkDiscordMock).not.toHaveBeenCalled();
     });
   });
   describe("add result filter preset", () => {
@@ -2339,79 +1322,6 @@ describe("user controller test", () => {
       expect(getTagsMock).toHaveBeenCalledWith(uid);
     });
   });
-  describe("update lb memory", () => {
-    const updateLbMemoryMock = vi.spyOn(UserDal, "updateLbMemory");
-    beforeEach(() => {
-      updateLbMemoryMock.mockClear().mockResolvedValue();
-    });
-
-    it("should update lb", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/leaderboardMemory")
-        .send({
-          mode: "time",
-          mode2: "60",
-          language: "english",
-          rank: 7,
-        })
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Leaderboard memory updated",
-        data: null,
-      });
-
-      expect(updateLbMemoryMock).toHaveBeenCalledWith(
-        uid,
-        "time",
-        "60",
-        "english",
-        7,
-      );
-    });
-
-    it("should fail without mandatory properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/leaderboardMemory")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: [
-          '"mode" Required',
-          '"mode2" Needs to be either a number, "zen" or "custom".',
-          '"language" Required',
-          '"rank" Required',
-        ],
-      });
-    });
-    it("should fail with unknown properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/leaderboardMemory")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          mode: "time",
-          mode2: "60",
-          language: "english",
-          rank: 7,
-          extra: "value",
-        })
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: ["Unrecognized key(s) in object: 'extra'"],
-      });
-    });
-  });
   describe("get custom themes", () => {
     const getThemesMock = vi.spyOn(UserDal, "getThemes");
     beforeEach(() => {
@@ -2682,18 +1592,6 @@ describe("user controller test", () => {
       });
       expect(getPBMock).toHaveBeenCalledWith(uid, "time", "15");
     });
-    it("should get pbs with ape key", async () => {
-      //GIVEN
-      await acceptApeKeys(true);
-      const apeKey = await mockAuthenticateWithApeKey(uid, await configuration);
-
-      //WHEN
-      await mockApp
-        .get("/users/personalBests")
-        .set("authorization", `ApeKey ${apeKey}`)
-        .query({ mode: "time", mode2: "15" })
-        .expect(200);
-    });
     it("should fail without mandatory query parameters", async () => {
       //WHEN
       const { body } = await mockApp
@@ -2771,17 +1669,6 @@ describe("user controller test", () => {
       });
 
       expect(getStatsMock).toHaveBeenCalledWith(uid);
-    });
-    it("should get stats with ape key", async () => {
-      //GIVEN
-      await acceptApeKeys(true);
-      const apeKey = await mockAuthenticateWithApeKey(uid, await configuration);
-
-      //WHEN
-      await mockApp
-        .get("/users/stats")
-        .set("authorization", `ApeKey ${apeKey}`)
-        .expect(200);
     });
   });
   describe("get favorite quotes", () => {
@@ -2918,8 +1805,6 @@ describe("user controller test", () => {
     const getUserMock = vi.spyOn(UserDal, "getUser");
     const getUserByNameMock = vi.spyOn(UserDal, "getUserByName");
     const checkIfUserIsPremiumMock = vi.spyOn(UserDal, "checkIfUserIsPremium");
-    const leaderboardGetRankMock = vi.spyOn(LeaderboardDal, "getRank");
-    const leaderboardGetCountMock = vi.spyOn(LeaderboardDal, "getCount");
 
     const foundUser: Partial<UserDal.DBUser> = {
       _id: new ObjectId(),
@@ -2958,11 +1843,8 @@ describe("user controller test", () => {
       startedTests: 42,
       timeTyping: 234,
       addedAt: 1000,
-      discordId: "discordId",
-      discordAvatar: "discordAvatar",
       xp: 10,
       streak: { length: 2, lastResultTimestamp: 2000, maxLength: 5 },
-      lbOptOut: false,
       bananas: 47, //should get removed
       testActivity: {
         "2024": fillYearWithDay(94),
@@ -2973,8 +1855,6 @@ describe("user controller test", () => {
       getUserMock.mockClear();
       getUserByNameMock.mockClear();
       checkIfUserIsPremiumMock.mockClear().mockResolvedValue(true);
-      leaderboardGetRankMock.mockClear();
-      leaderboardGetCountMock.mockClear();
       await enableProfiles(true);
     });
 
@@ -2982,10 +1862,6 @@ describe("user controller test", () => {
       //GIVEN
 
       getUserByNameMock.mockResolvedValue(foundUser as any);
-
-      const rank = { rank: 24 } as LeaderboardDal.DBLeaderboardEntry;
-      leaderboardGetRankMock.mockResolvedValue(rank);
-      leaderboardGetCountMock.mockResolvedValue(100);
 
       //WHEN
       const { body } = await mockApp.get("/users/bob/profile").expect(200);
@@ -3018,19 +1894,10 @@ describe("user controller test", () => {
             },
           },
 
-          discordId: "discordId",
-          discordAvatar: "discordAvatar",
           xp: 10,
           streak: 2,
           maxStreak: 5,
-          lbOptOut: false,
           isPremium: true,
-          allTimeLbs: {
-            time: {
-              "15": { english: { count: 100, rank: 24 } },
-              "60": { english: { count: 100, rank: 24 } },
-            },
-          },
           inventory: foundUser.inventory,
           details: foundUser.profileDetails,
         },
@@ -3045,10 +1912,6 @@ describe("user controller test", () => {
         ...foundUser,
         profileDetails: { showActivityOnPublicProfile: true },
       } as any);
-      const rank = { rank: 24 } as LeaderboardDal.DBLeaderboardEntry;
-      leaderboardGetRankMock.mockResolvedValue(rank);
-      leaderboardGetCountMock.mockResolvedValue(100);
-
       //WHEN
       const { body } = await mockApp.get("/users/bob/profile").expect(200);
 
@@ -3067,10 +1930,6 @@ describe("user controller test", () => {
         ...foundUser,
         profileDetails: { showActivityOnPublicProfile: false },
       } as any);
-      const rank = { rank: 24 } as LeaderboardDal.DBLeaderboardEntry;
-      leaderboardGetRankMock.mockResolvedValue(rank);
-      leaderboardGetCountMock.mockResolvedValue(100);
-
       //WHEN
       const { body } = await mockApp.get("/users/bob/profile").expect(200);
 
@@ -3084,10 +1943,6 @@ describe("user controller test", () => {
         ...foundUser,
         banned: true,
       } as any);
-
-      const rank = { rank: 24 } as LeaderboardDal.DBLeaderboardEntry;
-      leaderboardGetRankMock.mockResolvedValue(rank);
-      leaderboardGetCountMock.mockResolvedValue(100);
 
       //WHEN
       const { body } = await mockApp.get("/users/bob/profile").expect(200);
@@ -3119,12 +1974,9 @@ describe("user controller test", () => {
             },
           },
 
-          discordId: "discordId",
-          discordAvatar: "discordAvatar",
           xp: 10,
           streak: 2,
           maxStreak: 5,
-          lbOptOut: false,
           isPremium: true,
         },
       });
@@ -3135,10 +1987,6 @@ describe("user controller test", () => {
       //GIVEN
       const uid = foundUser.uid;
       getUserMock.mockResolvedValue(foundUser as any);
-
-      const rank = { rank: 24 } as LeaderboardDal.DBLeaderboardEntry;
-      leaderboardGetRankMock.mockResolvedValue(rank);
-      leaderboardGetCountMock.mockResolvedValue(100);
 
       //WHEN
       const { body } = await mockApp
@@ -3408,328 +2256,13 @@ describe("user controller test", () => {
       expect(body.message).toEqual("Profiles are not available at this time");
     });
   });
-  describe("get inbox", () => {
-    const getInboxMock = vi.spyOn(UserDal, "getInbox");
-
-    beforeEach(async () => {
-      getInboxMock.mockClear();
-      await enableInbox(true);
-    });
-
-    it("should get inbox", async () => {
-      //GIVEN
-      const mailOne: MonkeyMail = {
-        id: randomUUID(),
-        subject: "subjectOne",
-        body: "bodyOne",
-        timestamp: 100,
-        read: false,
-        rewards: [],
-      };
-      const mailTwo: MonkeyMail = {
-        id: randomUUID(),
-        subject: "subjectTwo",
-        body: "bodyTwo",
-        timestamp: 100,
-        read: false,
-        rewards: [],
-      };
-      getInboxMock.mockResolvedValue([mailOne, mailTwo]);
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/inbox")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Inbox retrieved",
-        data: {
-          inbox: [mailOne, mailTwo],
-          maxMail: (await Configuration.getLiveConfiguration()).users.inbox
-            .maxMail,
-        },
-      });
-      expect(getInboxMock).toHaveBeenCalledWith(uid);
-    });
-    it("should fail if feature is disabled", async () => {
-      //GIVEN
-      await enableInbox(false);
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/inbox")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(503);
-
-      //THEN
-      expect(body.message).toEqual("Your inbox is not available at this time.");
-    });
-  });
-  describe("update inbox", () => {
-    const updateInboxMock = vi.spyOn(UserDal, "updateInbox");
-    const mailIdOne = randomUUID();
-    const mailIdTwo = randomUUID();
-    beforeEach(async () => {
-      updateInboxMock.mockClear().mockResolvedValue();
-      await enableInbox(true);
-    });
-
-    it("should update", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/inbox")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          mailIdsToDelete: [mailIdOne],
-          mailIdsToMarkRead: [mailIdOne, mailIdTwo],
-        })
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Inbox updated",
-        data: null,
-      });
-
-      expect(updateInboxMock).toHaveBeenCalledWith(
-        uid,
-        [mailIdOne, mailIdTwo],
-        [mailIdOne],
-      );
-    });
-    it("should update without body", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/inbox")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Inbox updated",
-        data: null,
-      });
-
-      expect(updateInboxMock).toHaveBeenCalledWith(uid, [], []);
-    });
-    it("should fail with empty arrays", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/inbox")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          mailIdsToDelete: [],
-          mailIdsToMarkRead: [],
-        })
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: [
-          '"mailIdsToDelete" Array must contain at least 1 element(s)',
-          '"mailIdsToMarkRead" Array must contain at least 1 element(s)',
-        ],
-      });
-    });
-    it("should fail if feature is disabled", async () => {
-      //GIVEN
-      await enableInbox(false);
-
-      //WHEN
-      const { body } = await mockApp
-        .patch("/users/inbox")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(503);
-
-      //THEN
-      expect(body.message).toEqual("Your inbox is not available at this time.");
-    });
-  });
-  describe("report user", () => {
-    const createReportMock = vi.spyOn(ReportDal, "createReport");
-    const verifyCaptchaMock = vi.spyOn(Captcha, "verify");
-    const getPartialUserMock = vi.spyOn(UserDal, "getPartialUser"); //todo replace with getPartialUser
-    beforeEach(async () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(125000);
-      createReportMock.mockClear().mockResolvedValue();
-      verifyCaptchaMock.mockClear().mockResolvedValue(true);
-      getPartialUserMock.mockClear().mockResolvedValue({} as any);
-
-      await enableReporting(true);
-    });
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it("should report", async () => {
-      //WHEN
-      const uidToReport = new ObjectId().toHexString();
-
-      const { body } = await mockApp
-        .post("/users/report")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          uid: uidToReport,
-          reason: "Suspected cheating",
-          comment: "comment",
-          captcha: "captcha",
-        })
-        .expect(200);
-
-      //THEN
-      expect(body).toEqual({
-        message: "User reported",
-        data: null,
-      });
-      expect(createReportMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "user",
-          timestamp: 125000,
-          uid,
-          contentId: uidToReport,
-          reason: "Suspected cheating",
-          comment: "comment",
-        }),
-        (await Configuration.getLiveConfiguration()).quotes.reporting
-          .maxReports,
-        (await Configuration.getLiveConfiguration()).quotes.reporting
-          .contentReportLimit,
-      );
-      expect(verifyCaptchaMock).toHaveBeenCalledWith("captcha");
-    });
-    it("should fail without mandatory properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/report")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: [
-          '"uid" Required',
-          '"reason" Required',
-          '"captcha" Required',
-        ],
-      });
-    });
-    it("should fail with unknown properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/report")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          uid: new ObjectId().toHexString(),
-          reason: "Suspected cheating",
-          comment: "comment",
-          captcha: "captcha",
-          extra: "value",
-        })
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: ["Unrecognized key(s) in object: 'extra'"],
-      });
-    });
-    it("should fail with invalid captcha", async () => {
-      //GIVEN
-      verifyCaptchaMock.mockResolvedValue(false);
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/report")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          uid: new ObjectId().toHexString(),
-          reason: "Suspected cheating",
-          comment: "comment",
-          captcha: "captcha",
-        })
-        .expect(422);
-
-      //THEN
-      expect(body.message).toEqual("Captcha challenge failed");
-      /* TODO
-      expect(body).toEqual({});
-      */
-    });
-    it("should fail with invalid properties", async () => {
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/report")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          uid: new Array(51).fill("x").join(""),
-          reason: "unfriendly",
-          comment: new Array(251).fill("x").join(""),
-          captcha: "captcha",
-        })
-        .expect(422);
-
-      //THEN
-      expect(body).toEqual({
-        message: "Invalid request data schema",
-        validationErrors: [
-          `"reason" Invalid enum value. Expected 'Inappropriate name' | 'Inappropriate bio' | 'Inappropriate social links' | 'Suspected cheating', received 'unfriendly'`,
-          '"comment" String must contain at most 250 character(s)',
-        ],
-      });
-    });
-    it("should fail if user can not report", async () => {
-      //GIVEN
-      getPartialUserMock.mockResolvedValue({ canReport: false } as any);
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/report")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          uid: new ObjectId().toHexString(),
-          reason: "Suspected cheating",
-          comment: "comment",
-          captcha: "captcha",
-        })
-        .expect(403);
-
-      //THEN
-      expect(body.message).toEqual("You don't have permission to do this.");
-    });
-    it("should fail if feature is disabled", async () => {
-      //GIVEN
-      await enableReporting(false);
-
-      //WHEN
-      const { body } = await mockApp
-        .post("/users/report")
-        .set("Authorization", `Bearer ${uid}`)
-        .send({
-          uid: new ObjectId().toHexString(),
-          reason: "Suspected cheating",
-          comment: "comment",
-          captcha: "captcha",
-        })
-        .expect(503);
-
-      //THEN
-      expect(body.message).toEqual("User reporting is unavailable.");
-    });
-  });
   describe("set streak hour offset", () => {
     const getPartialUserMock = vi.spyOn(UserDal, "getPartialUser");
     const setStreakHourOffsetMock = vi.spyOn(UserDal, "setStreakHourOffset");
-    const addImportantLogMock = vi.spyOn(LogDal, "addImportantLog");
 
     beforeEach(() => {
       getPartialUserMock.mockClear().mockResolvedValue({} as any);
       setStreakHourOffsetMock.mockClear().mockResolvedValue();
-      addImportantLogMock.mockClear().mockResolvedValue();
     });
 
     it("should set", async () => {
@@ -3747,11 +2280,6 @@ describe("user controller test", () => {
       });
 
       expect(setStreakHourOffsetMock).toHaveBeenCalledWith(uid, -2);
-      expect(addImportantLogMock).toHaveBeenCalledWith(
-        "user_streak_hour_offset_set",
-        { hourOffset: -2 },
-        uid,
-      );
     });
     it("should fail if offset already set", async () => {
       //GIVEN
@@ -3769,7 +2297,6 @@ describe("user controller test", () => {
       //THEN
       expect(body.message).toEqual("Streak hour offset already set");
       expect(setStreakHourOffsetMock).not.toHaveBeenCalled();
-      expect(addImportantLogMock).not.toHaveBeenCalled();
     });
     it("should fail without mandatory properties", async () => {
       //WHEN
@@ -3806,11 +2333,9 @@ describe("user controller test", () => {
   });
   describe("revoke all token", () => {
     const removeTokensByUidMock = vi.spyOn(AuthUtils, "revokeTokensByUid");
-    const addImportantLogMock = vi.spyOn(LogDal, "addImportantLog");
 
     beforeEach(() => {
       removeTokensByUidMock.mockClear().mockResolvedValue();
-      addImportantLogMock.mockClear().mockResolvedValue();
     });
     it("should revoke all tokens", async () => {
       //WHEN
@@ -3825,11 +2350,6 @@ describe("user controller test", () => {
         data: null,
       });
       expect(removeTokensByUidMock).toHaveBeenCalledWith(uid);
-      expect(addImportantLogMock).toHaveBeenCalledWith(
-        "user_tokens_revoked",
-        "",
-        uid,
-      );
     });
   });
   describe("getCurrentTestActivity", () => {
@@ -3902,62 +2422,6 @@ describe("user controller test", () => {
       });
     });
   });
-  describe("get friends", () => {
-    const getFriendsMock = vi.spyOn(UserDal, "getFriends");
-
-    beforeEach(async () => {
-      await enableConnectionsEndpoints(true);
-      getFriendsMock.mockClear();
-    });
-
-    it("gets with premium enabled", async () => {
-      //GIVEN
-      await enablePremiumFeatures(true);
-      const friend: UserDal.DBFriend = {
-        name: "Bob",
-        isPremium: true,
-      } as any;
-      getFriendsMock.mockResolvedValue([friend]);
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/friends")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(body.data).toEqual([{ name: "Bob", isPremium: true }]);
-    });
-
-    it("gets with premium disabled", async () => {
-      //GIVEN
-      await enablePremiumFeatures(false);
-      const friend: UserDal.DBFriend = {
-        name: "Bob",
-        isPremium: true,
-      } as any;
-      getFriendsMock.mockResolvedValue([friend]);
-
-      //WHEN
-      const { body } = await mockApp
-        .get("/users/friends")
-        .set("Authorization", `Bearer ${uid}`)
-        .expect(200);
-
-      //THEN
-      expect(body.data).toEqual([{ name: "Bob" }]);
-    });
-
-    it("should fail if friends endpoints are disabled", async () => {
-      await expectFailForDisabledEndpoint(
-        mockApp.get("/users/friends").set("Authorization", `Bearer ${uid}`),
-      );
-    });
-
-    it("should fail without authentication", async () => {
-      await mockApp.get("/users/friends").expect(401);
-    });
-  });
 });
 
 function fillYearWithDay(days: number): number[] {
@@ -3986,33 +2450,12 @@ async function enableSignup(signUp: boolean): Promise<void> {
   );
 }
 
-async function enableDiscordIntegration(enabled: boolean): Promise<void> {
-  const mockConfig = await configuration;
-  mockConfig.users.discordIntegration = {
-    ...mockConfig.users.discordIntegration,
-    enabled,
-  };
-
-  vi.spyOn(Configuration, "getCachedConfiguration").mockResolvedValue(
-    mockConfig,
-  );
-}
-
 async function enableResultFilterPresets(enabled: boolean): Promise<void> {
   const mockConfig = await configuration;
   mockConfig.results.filterPresets = {
     ...mockConfig.results.filterPresets,
     enabled,
   };
-
-  vi.spyOn(Configuration, "getCachedConfiguration").mockResolvedValue(
-    mockConfig,
-  );
-}
-
-async function acceptApeKeys(acceptKeys: boolean): Promise<void> {
-  const mockConfig = await configuration;
-  mockConfig.apeKeys = { ...mockConfig.apeKeys, acceptKeys };
 
   vi.spyOn(Configuration, "getCachedConfiguration").mockResolvedValue(
     mockConfig,
@@ -4026,36 +2469,4 @@ async function enableProfiles(enabled: boolean): Promise<void> {
   vi.spyOn(Configuration, "getCachedConfiguration").mockResolvedValue(
     mockConfig,
   );
-}
-async function enableInbox(enabled: boolean): Promise<void> {
-  const mockConfig = await configuration;
-  mockConfig.users.inbox = { ...mockConfig.users.inbox, enabled };
-
-  vi.spyOn(Configuration, "getCachedConfiguration").mockResolvedValue(
-    mockConfig,
-  );
-}
-
-async function enableReporting(enabled: boolean): Promise<void> {
-  const mockConfig = await configuration;
-  mockConfig.quotes.reporting = { ...mockConfig.quotes.reporting, enabled };
-
-  vi.spyOn(Configuration, "getCachedConfiguration").mockResolvedValue(
-    mockConfig,
-  );
-}
-
-async function enableConnectionsEndpoints(enabled: boolean): Promise<void> {
-  const mockConfig = await configuration;
-  mockConfig.connections = { ...mockConfig.connections, enabled };
-
-  vi.spyOn(Configuration, "getCachedConfiguration").mockResolvedValue(
-    mockConfig,
-  );
-}
-
-async function expectFailForDisabledEndpoint(call: Test): Promise<void> {
-  await enableConnectionsEndpoints(false);
-  const { body } = await call.expect(503);
-  expect(body.message).toEqual("Connections are not available at this time.");
 }

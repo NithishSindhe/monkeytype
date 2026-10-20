@@ -18,27 +18,11 @@ export const projects: UserWorkspaceConfig[] = [
       setupFiles: ["__tests__/__integration__/setup-integration-tests.ts"],
       globalSetup: "__tests__/__integration__/global-setup.ts",
       include: ["__tests__/__integration__/**/*.spec.ts"],
-      exclude: ["**/*.isolated.spec.ts"],
 
       sequence: {
         concurrent: false,
         groupOrder: 1,
       },
-    },
-  },
-  {
-    test: {
-      name: { label: "integration-isolated", color: "magenta" },
-      setupFiles: ["__tests__/__integration__/setup-integration-tests.ts"],
-      globalSetup: "__tests__/__integration__/global-setup.ts",
-      include: ["__tests__/__integration__/**/*.isolated.spec.ts"],
-
-      sequence: {
-        concurrent: false,
-        groupOrder: 2,
-      },
-      pool: "threads",
-      maxWorkers: 1,
     },
   },
 ];

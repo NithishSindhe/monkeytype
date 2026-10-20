@@ -13,20 +13,17 @@ import {
   CustomThemeNameSchema,
   CustomThemeSchema,
   FavoriteQuotesSchema,
-  MonkeyMailSchema,
   ResultFiltersSchema,
   StreakHourOffsetSchema,
   TagNameSchema,
   TestActivitySchema,
   UserProfileDetailsSchema,
   UserProfileSchema,
-  ReportUserReasonSchema,
   UserSchema,
   UserStreakSchema,
   UserTagSchema,
   UserEmailSchema,
   UserNameSchema,
-  FriendSchema,
 } from "@monkeytype/schemas/users";
 import {
   Mode2Schema,
@@ -37,11 +34,7 @@ import { IdSchema, StringNumberSchema } from "@monkeytype/schemas/util";
 import { LanguageSchema } from "@monkeytype/schemas/languages";
 import { CustomThemeColorsSchema } from "@monkeytype/schemas/configs";
 
-export const GetUserResponseSchema = responseWithData(
-  UserSchema.extend({
-    inboxUnreadSize: z.number().int().nonnegative(),
-  }),
-);
+export const GetUserResponseSchema = responseWithData(UserSchema);
 export type GetUserResponse = z.infer<typeof GetUserResponseSchema>;
 
 export const CreateUserRequestSchema = z.object({
@@ -70,16 +63,6 @@ export const UpdateUserNameRequestSchema = z.object({
   name: UserNameSchema,
 });
 export type UpdateUserNameRequest = z.infer<typeof UpdateUserNameRequestSchema>;
-
-export const UpdateLeaderboardMemoryRequestSchema = z.object({
-  mode: ModeSchema,
-  mode2: Mode2Schema,
-  language: LanguageSchema,
-  rank: z.number().int().nonnegative(),
-});
-export type UpdateLeaderboardMemoryRequest = z.infer<
-  typeof UpdateLeaderboardMemoryRequestSchema
->;
 
 export const UpdateEmailRequestSchema = z.object({
   newEmail: UserEmailSchema,
@@ -177,27 +160,6 @@ export const EditCustomThemeRequstSchema = z.object({
 });
 export type EditCustomThemeRequst = z.infer<typeof EditCustomThemeRequstSchema>;
 
-export const GetDiscordOauthLinkResponseSchema = responseWithData(
-  z.object({
-    url: z.string().url(),
-  }),
-);
-export type GetDiscordOauthLinkResponse = z.infer<
-  typeof GetDiscordOauthLinkResponseSchema
->;
-
-export const LinkDiscordRequestSchema = z.object({
-  tokenType: z.string(),
-  accessToken: z.string(),
-  state: z.string().length(20),
-});
-export type LinkDiscordRequest = z.infer<typeof LinkDiscordRequestSchema>;
-
-export const LinkDiscordResponseSchema = responseWithData(
-  UserSchema.pick({ discordId: true, discordAvatar: true }),
-);
-export type LinkDiscordResponse = z.infer<typeof LinkDiscordResponseSchema>;
-
 export const GetStatsResponseSchema = responseWithData(
   UserSchema.pick({
     completedTests: true,
@@ -274,45 +236,6 @@ export type UpdateUserProfileResponse = z.infer<
   typeof UpdateUserProfileResponseSchema
 >;
 
-export const GetUserInboxResponseSchema = responseWithData(
-  z.object({
-    inbox: z.array(MonkeyMailSchema),
-    maxMail: z.number().int(),
-  }),
-);
-export type GetUserInboxResponse = z.infer<typeof GetUserInboxResponseSchema>;
-
-export const UpdateUserInboxRequestSchema = z.object({
-  mailIdsToDelete: z.array(z.string().uuid()).min(1).optional(),
-  mailIdsToMarkRead: z.array(z.string().uuid()).min(1).optional(),
-});
-export type UpdateUserInboxRequest = z.infer<
-  typeof UpdateUserInboxRequestSchema
->;
-
-export const ReportUserCommentSchema = z
-  .string()
-  .regex(/^([.]|[^/<>])+$/)
-  .max(250)
-  .optional()
-  .or(z.string().length(0));
-
-export const ReportUserRequestSchema = z.object({
-  uid: z.string(),
-  reason: ReportUserReasonSchema,
-  comment: ReportUserCommentSchema,
-  captcha: z.string(), //we don't generate the captcha so there should be no validation
-});
-export type ReportUserRequest = z.infer<typeof ReportUserRequestSchema>;
-
-export const ForgotPasswordEmailRequestSchema = z.object({
-  captcha: z.string(),
-  email: UserEmailSchema,
-});
-export type ForgotPasswordEmailRequest = z.infer<
-  typeof ForgotPasswordEmailRequestSchema
->;
-
 export const GetTestActivityResponseSchema = responseWithNullableData(
   CountByYearAndDaySchema,
 );
@@ -329,9 +252,6 @@ export type GetCurrentTestActivityResponse = z.infer<
 export const GetStreakResponseSchema =
   responseWithNullableData(UserStreakSchema);
 export type GetStreakResponse = z.infer<typeof GetStreakResponseSchema>;
-
-export const GetFriendsResponseSchema = responseWithData(z.array(FriendSchema));
-export type GetFriendsResponse = z.infer<typeof GetFriendsResponseSchema>;
 
 const c = initContract();
 
@@ -422,19 +342,6 @@ export const usersContract = c.router(
         rateLimit: "userUpdateName",
       }),
     },
-    updateLeaderboardMemory: {
-      summary: "update lbMemory",
-      description: "Updates a user's cached leaderboard state",
-      method: "PATCH",
-      path: "/leaderboardMemory",
-      body: UpdateLeaderboardMemoryRequestSchema.strict(),
-      responses: {
-        200: MonkeyResponseSchema,
-      },
-      metadata: meta({
-        rateLimit: "userUpdateLBMemory",
-      }),
-    },
     updateEmail: {
       summary: "update email",
       description: "Updates a user's email",
@@ -473,7 +380,6 @@ export const usersContract = c.router(
         200: GetPersonalBestsResponseSchema,
       },
       metadata: meta({
-        authenticationOptions: { acceptApeKeys: true },
         rateLimit: "userGet",
       }),
     },
@@ -489,20 +395,6 @@ export const usersContract = c.router(
       metadata: meta({
         authenticationOptions: { requireFreshToken: true },
         rateLimit: "userClearPB",
-      }),
-    },
-    optOutOfLeaderboards: {
-      summary: "leaderboards opt out",
-      description: "Opt out of the leaderboards",
-      method: "POST",
-      path: "/optOutOfLeaderboards",
-      body: c.noBody(),
-      responses: {
-        200: MonkeyResponseSchema,
-      },
-      metadata: meta({
-        authenticationOptions: { requireFreshToken: true },
-        rateLimit: "userOptOutOfLeaderboards",
       }),
     },
     addResultFilterPreset: {
@@ -551,7 +443,6 @@ export const usersContract = c.router(
         200: GetTagsResponseSchema,
       },
       metadata: meta({
-        authenticationOptions: { acceptApeKeys: true },
         rateLimit: "userTagsGet",
       }),
     },
@@ -660,52 +551,6 @@ export const usersContract = c.router(
         rateLimit: "userCustomThemeEdit",
       }),
     },
-    getDiscordOAuth: {
-      summary: "discord oauth",
-      description: "Start OAuth authentication with discord",
-      method: "GET",
-      path: "/discord/oauth",
-      responses: {
-        200: GetDiscordOauthLinkResponseSchema,
-      },
-      metadata: meta({
-        rateLimit: "userDiscordLink",
-        requireConfiguration: {
-          path: "users.discordIntegration.enabled",
-          invalidMessage: "Discord integration is not available at this time",
-        },
-      }),
-    },
-    linkDiscord: {
-      summary: "link with discord",
-      description: "Links a user's account with a discord account",
-      method: "POST",
-      path: "/discord/link",
-      body: LinkDiscordRequestSchema.strict(),
-      responses: {
-        200: LinkDiscordResponseSchema,
-      },
-      metadata: meta({
-        rateLimit: "userDiscordLink",
-        requireConfiguration: {
-          path: "users.discordIntegration.enabled",
-          invalidMessage: "Discord integration is not available at this time",
-        },
-      }),
-    },
-    unlinkDiscord: {
-      summary: "unlink discord",
-      description: "Unlinks a user's account with a discord account",
-      method: "POST",
-      path: "/discord/unlink",
-      body: c.noBody(),
-      responses: {
-        200: MonkeyResponseSchema,
-      },
-      metadata: meta({
-        rateLimit: "userDiscordUnlink",
-      }),
-    },
     getStats: {
       summary: "get stats",
       description: "Gets a user's typing stats data",
@@ -715,7 +560,6 @@ export const usersContract = c.router(
         200: GetStatsResponseSchema,
       },
       metadata: meta({
-        authenticationOptions: { acceptApeKeys: true },
         rateLimit: "userGet",
       }),
     },
@@ -807,84 +651,6 @@ export const usersContract = c.router(
         },
       }),
     },
-    getInbox: {
-      summary: "get inbox",
-      description: "Gets the user's inbox",
-      method: "GET",
-      path: "/inbox",
-      responses: {
-        200: GetUserInboxResponseSchema,
-      },
-      metadata: meta({
-        rateLimit: "userMailGet",
-        requireConfiguration: {
-          path: "users.inbox.enabled",
-          invalidMessage: "Your inbox is not available at this time.",
-        },
-      }),
-    },
-    updateInbox: {
-      summary: "update inbox",
-      description: "Updates the user's inbox",
-      method: "PATCH",
-      body: UpdateUserInboxRequestSchema.strict(),
-      path: "/inbox",
-      responses: {
-        200: MonkeyResponseSchema,
-      },
-      metadata: meta({
-        rateLimit: "userMailUpdate",
-        requireConfiguration: {
-          path: "users.inbox.enabled",
-          invalidMessage: "Your inbox is not available at this time.",
-        },
-      }),
-    },
-    report: {
-      summary: "report user",
-      description: "Report a user",
-      method: "POST",
-      path: "/report",
-      body: ReportUserRequestSchema.strict(),
-      responses: {
-        200: MonkeyResponseSchema,
-      },
-      metadata: meta({
-        rateLimit: "quoteReportSubmit",
-        requirePermission: "canReport",
-        requireConfiguration: {
-          path: "quotes.reporting.enabled",
-          invalidMessage: "User reporting is unavailable.",
-        },
-      }),
-    },
-    verificationEmail: {
-      summary: "send verification email",
-      description: "Send a verification email",
-      method: "GET",
-      path: "/verificationEmail",
-      responses: {
-        200: MonkeyResponseSchema,
-      },
-      metadata: meta({
-        authenticationOptions: { noCache: true },
-        rateLimit: "userRequestVerificationEmail",
-      }),
-    },
-    forgotPasswordEmail: {
-      summary: "send forgot password email",
-      description: "Send a forgot password email",
-      method: "POST",
-      path: "/forgotPasswordEmail",
-      body: ForgotPasswordEmailRequestSchema.strict(),
-      responses: {
-        200: MonkeyResponseSchema,
-      },
-      metadata: meta({
-        authenticationOptions: { isPublic: true },
-        rateLimit: "userForgotPasswordEmail",
-      }),
-    },
     revokeAllTokens: {
       summary: "revoke all tokens",
       description: "Revoke all tokens for the current user.",
@@ -921,7 +687,6 @@ export const usersContract = c.router(
         200: GetCurrentTestActivityResponseSchema,
       },
       metadata: meta({
-        authenticationOptions: { acceptApeKeys: true },
         rateLimit: "userCurrentTestActivity",
       }),
     },
@@ -934,24 +699,7 @@ export const usersContract = c.router(
         200: GetStreakResponseSchema,
       },
       metadata: meta({
-        authenticationOptions: { acceptApeKeys: true },
         rateLimit: "userStreak",
-      }),
-    },
-    getFriends: {
-      summary: "get friends",
-      description: "get friends list",
-      method: "GET",
-      path: "/friends",
-      responses: {
-        200: GetFriendsResponseSchema,
-      },
-      metadata: meta({
-        rateLimit: "userFriendGet",
-        requireConfiguration: {
-          path: "connections.enabled",
-          invalidMessage: "Connections are not available at this time.",
-        },
       }),
     },
   },

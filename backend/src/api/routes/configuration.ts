@@ -10,11 +10,4 @@ export default s.router(configurationContract, {
     handler: async (r) =>
       callController(ConfigurationController.getConfiguration)(r),
   },
-  update: {
-    handler: async (r) =>
-      callController(ConfigurationController.updateConfiguration)(r),
-  },
-  getSchema: {
-    handler: async (r) => callController(ConfigurationController.getSchema)(r),
-  },
 });

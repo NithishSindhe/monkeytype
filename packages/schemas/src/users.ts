@@ -3,17 +3,14 @@ import { IdSchema, nameWithSeparators, slug, StringNumberSchema } from "./util";
 import { LanguageSchema } from "./languages";
 import {
   ModeSchema,
-  Mode2Schema,
   PersonalBestsSchema,
   DefaultWordsModeSchema,
   DefaultTimeModeSchema,
   QuoteLengthSchema,
   DifficultySchema,
-  PersonalBestSchema,
 } from "./shared";
 import { CustomThemeColorsSchema, FunboxNameSchema } from "./configs";
 import { doesNotContainDisallowedWords } from "./validation/validation";
-import { ConnectionSchema } from "./connections";
 
 export const ResultFilterPresetNameSchema = slug().max(16);
 
@@ -143,38 +140,6 @@ export const PremiumInfoSchema = z.object({
 });
 export type PremiumInfo = z.infer<typeof PremiumInfoSchema>;
 
-export const UserQuoteRatingsSchema = z.record(
-  LanguageSchema,
-  z.record(
-    StringNumberSchema.describe("quoteId as string"),
-    z.number().nonnegative(),
-  ),
-);
-export type UserQuoteRatings = z.infer<typeof UserQuoteRatingsSchema>;
-
-export const UserLbMemorySchema = z.record(
-  ModeSchema,
-  z.record(
-    Mode2Schema,
-    z.record(LanguageSchema, z.number().int().nonnegative()),
-  ),
-);
-export type UserLbMemory = z.infer<typeof UserLbMemorySchema>;
-
-export const RankAndCountSchema = z.object({
-  rank: z.number().int().nonnegative().optional(),
-  count: z.number().int().nonnegative(),
-});
-export type RankAndCount = z.infer<typeof RankAndCountSchema>;
-
-export const AllTimeLbsSchema = z.object({
-  time: z.record(
-    Mode2Schema,
-    z.record(LanguageSchema, RankAndCountSchema.optional()),
-  ),
-});
-export type AllTimeLbs = z.infer<typeof AllTimeLbsSchema>;
-
 export const BadgeSchema = z
   .object({
     id: z.number().int().nonnegative(),
@@ -189,12 +154,6 @@ export const UserInventorySchema = z
   })
   .strict();
 export type UserInventory = z.infer<typeof UserInventorySchema>;
-
-export const QuoteModSchema = z
-  .boolean()
-  .describe("Admin for all languages if true")
-  .or(LanguageSchema.describe("Admin for the given language"));
-export type QuoteMod = z.infer<typeof QuoteModSchema>;
 
 export const TestActivitySchema = z
   .object({
@@ -265,23 +224,16 @@ export const UserSchema = z.object({
     .describe("time typing in seconds"),
   streak: UserStreakSchema.optional(),
   xp: z.number().int().nonnegative().optional(),
-  discordId: z.string().optional(),
-  discordAvatar: z.string().optional(),
   tags: z.array(UserTagSchema).optional(),
   profileDetails: UserProfileDetailsSchema.optional(),
   customThemes: z.array(CustomThemeSchema).optional(),
   premium: PremiumInfoSchema.optional(),
   isPremium: z.boolean().optional(),
-  quoteRatings: UserQuoteRatingsSchema.optional(),
   favoriteQuotes: FavoriteQuotesSchema.optional(),
-  lbMemory: UserLbMemorySchema.optional(),
-  allTimeLbs: AllTimeLbsSchema,
   inventory: UserInventorySchema.optional(),
   banned: z.boolean().optional(),
-  lbOptOut: z.boolean().optional(),
   verified: z.boolean().optional(),
   needsToChangeName: z.boolean().optional(),
-  quoteMod: QuoteModSchema.optional(),
   resultFilterPresets: z.array(ResultFiltersSchema).optional(),
   testActivity: TestActivitySchema.optional(),
 });
@@ -304,13 +256,9 @@ export const UserProfileSchema = UserSchema.pick({
   name: true,
   banned: true,
   addedAt: true,
-  discordId: true,
-  discordAvatar: true,
   xp: true,
-  lbOptOut: true,
   isPremium: true,
   inventory: true,
-  allTimeLbs: true,
   testActivity: true,
 })
   .extend({
@@ -324,46 +272,9 @@ export const UserProfileSchema = UserSchema.pick({
     //omitted for banned users
     inventory: true,
     details: true,
-    allTimeLbs: true,
     uid: true,
   });
 export type UserProfile = z.infer<typeof UserProfileSchema>;
-
-export const RewardTypeSchema = z.enum(["xp", "badge"]);
-export type RewardType = z.infer<typeof RewardTypeSchema>;
-
-export const XpRewardSchema = z.object({
-  type: z.literal(RewardTypeSchema.enum.xp),
-  item: z.number().int(),
-});
-export type XpReward = z.infer<typeof XpRewardSchema>;
-
-export const BadgeRewardSchema = z.object({
-  type: z.literal(RewardTypeSchema.enum.badge),
-  item: BadgeSchema,
-});
-export type BadgeReward = z.infer<typeof BadgeRewardSchema>;
-
-export const AllRewardsSchema = XpRewardSchema.or(BadgeRewardSchema);
-export type AllRewards = z.infer<typeof AllRewardsSchema>;
-
-export const MonkeyMailSchema = z.object({
-  id: IdSchema,
-  subject: z.string(),
-  body: z.string(),
-  timestamp: z.number().int().nonnegative(),
-  read: z.boolean(),
-  rewards: z.array(AllRewardsSchema),
-});
-export type MonkeyMail = z.infer<typeof MonkeyMailSchema>;
-
-export const ReportUserReasonSchema = z.enum([
-  "Inappropriate name",
-  "Inappropriate bio",
-  "Inappropriate social links",
-  "Suspected cheating",
-]);
-export type ReportUserReason = z.infer<typeof ReportUserReasonSchema>;
 
 // stricter schema used while password creation
 export const NewPasswordSchema = z
@@ -380,27 +291,3 @@ export type NewPassword = z.infer<typeof NewPasswordSchema>;
 // lenient schema for existing passwords
 export const PasswordSchema = z.string().min(1, "Required");
 export type Password = z.infer<typeof PasswordSchema>;
-
-export const FriendSchema = UserSchema.pick({
-  uid: true,
-  name: true,
-  discordId: true,
-  discordAvatar: true,
-  startedTests: true,
-  completedTests: true,
-  timeTyping: true,
-  xp: true,
-  banned: true,
-  lbOptOut: true,
-})
-  .extend({
-    connectionId: IdSchema.optional(),
-    top15: PersonalBestSchema.optional(),
-    top60: PersonalBestSchema.optional(),
-    badgeId: z.number().int().optional(),
-    isPremium: z.boolean().optional(),
-    streak: UserStreakSchema.pick({ length: true, maxLength: true }).optional(),
-  })
-  .merge(ConnectionSchema.pick({ lastModified: true }).partial());
-
-export type Friend = z.infer<typeof FriendSchema>;

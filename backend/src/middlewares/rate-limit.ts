@@ -15,7 +15,6 @@ import {
   RateLimitOptions,
   Window,
 } from "@monkeytype/contracts/rate-limit/index";
-import statuses from "../constants/monkey-status-codes";
 import { getMetadata } from "./utility";
 import {
   ExpressRequestWithContext,
@@ -26,17 +25,11 @@ import { AppRoute, AppRouter } from "@ts-rest/core";
 export const REQUEST_MULTIPLIER = isDevEnvironment() ? 100 : 1;
 
 export const customHandler = (
-  req: ExpressRequestWithContext,
+  _req: ExpressRequestWithContext,
   _res: Response,
   _next: NextFunction,
   _options: Options,
 ): void => {
-  if (req.ctx.decodedToken.type === "ApeKey") {
-    throw new MonkeyError(
-      statuses.APE_KEY_RATE_LIMIT_EXCEEDED.code,
-      statuses.APE_KEY_RATE_LIMIT_EXCEEDED.message,
-    );
-  }
   throw new MonkeyError(429, "Request limit reached, please try again later.");
 };
 
@@ -110,18 +103,7 @@ export function rateLimitRequest<
       return;
     }
 
-    const hasApeKeyLimiterId = typeof metadataRateLimit === "object";
-    let rateLimiterId: RateLimiterId;
-
-    if (req.ctx.decodedToken.type === "ApeKey") {
-      rateLimiterId = hasApeKeyLimiterId
-        ? metadataRateLimit.apeKey
-        : "defaultApeRateLimit";
-    } else {
-      rateLimiterId = hasApeKeyLimiterId
-        ? metadataRateLimit.normal
-        : metadataRateLimit;
-    }
+    const rateLimiterId: RateLimiterId = metadataRateLimit;
 
     const rateLimiter = requestLimiters[rateLimiterId];
     if (rateLimiter === undefined) {

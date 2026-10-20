@@ -1,10 +1,7 @@
-import { compare } from "bcrypt";
-import { getApeKey, updateLastUsedOn } from "../dal/ape-keys";
 import MonkeyError from "../utils/error";
 import { verifyIdToken } from "../utils/auth";
-import { base64UrlDecode, isDevEnvironment } from "../utils/misc";
+import { isDevEnvironment } from "../utils/misc";
 import { NextFunction, Response } from "express";
-import statuses from "../constants/monkey-status-codes";
 import {
   incrementAuth,
   recordAuthTime,
@@ -22,7 +19,7 @@ import { AsyncTsRestRequestHandler, getMetadata } from "./utility";
 import { TsRestRequestWithContext } from "../api/types";
 
 export type DecodedToken = {
-  type: "Bearer" | "ApeKey" | "None" | "GithubWebhook";
+  type: "Bearer" | "None" | "GithubWebhook";
   uid: string;
   email: string;
 };
@@ -30,7 +27,6 @@ export type DecodedToken = {
 const DEFAULT_OPTIONS: RequestAuthenticationOptions = {
   isGithubWebhook: false,
   isPublic: false,
-  acceptApeKeys: false,
   requireFreshToken: false,
   isPublicOnDev: false,
 };
@@ -148,8 +144,6 @@ async function authenticateWithAuthHeader(
   switch (normalizedAuthScheme) {
     case "Bearer":
       return await authenticateWithBearerToken(token, options);
-    case "ApeKey":
-      return await authenticateWithApeKey(token, configuration, options);
     case "Uid":
       return await authenticateWithUid(token);
   }
@@ -231,70 +225,6 @@ async function authenticateWithBearerToken(
     } else {
       throw error;
     }
-  }
-}
-
-async function authenticateWithApeKey(
-  key: string,
-  configuration: Configuration,
-  options: RequestAuthenticationOptions,
-): Promise<DecodedToken> {
-  const isPublic =
-    options.isPublic === true || (options.isPublicOnDev && isDevEnvironment());
-
-  if (!isPublic) {
-    if (!configuration.apeKeys.acceptKeys) {
-      throw new MonkeyError(503, "ApeKeys are not being accepted at this time");
-    }
-
-    if (!options.acceptApeKeys) {
-      throw new MonkeyError(401, "This endpoint does not accept ApeKeys");
-    }
-  }
-
-  try {
-    const decodedKey = base64UrlDecode(key);
-    const [keyId, apeKey] = decodedKey.split(".");
-
-    if (
-      keyId === undefined ||
-      keyId === "" ||
-      apeKey === undefined ||
-      apeKey === ""
-    ) {
-      throw new MonkeyError(400, "Malformed ApeKey");
-    }
-
-    const targetApeKey = await getApeKey(keyId);
-    if (!targetApeKey) {
-      throw new MonkeyError(404, "ApeKey not found");
-    }
-
-    if (!targetApeKey.enabled) {
-      const { code, message } = statuses.APE_KEY_INACTIVE;
-      throw new MonkeyError(code, message);
-    }
-
-    const isKeyValid = await compare(apeKey, targetApeKey.hash);
-    if (!isKeyValid) {
-      const { code, message } = statuses.APE_KEY_INVALID;
-      throw new MonkeyError(code, message);
-    }
-
-    await updateLastUsedOn(targetApeKey.uid, keyId);
-
-    return {
-      type: "ApeKey",
-      uid: targetApeKey.uid,
-      email: "",
-    };
-  } catch (error) {
-    if (!(error instanceof MonkeyError)) {
-      const { code, message } = statuses.APE_KEY_MALFORMED;
-      throw new MonkeyError(code, message);
-    }
-
-    throw error;
   }
 }
 

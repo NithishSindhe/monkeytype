@@ -99,10 +99,7 @@ describe("configuration middleware", () => {
   });
   it("should fail for undefined value", () => {
     //GIVEN
-    const req = givenRequest(
-      { path: "admin.endpointsEnabled" },
-      { admin: {} as any },
-    );
+    const req = givenRequest({ path: "users.signUp" }, { users: {} as any });
 
     //WHEN
     handler(req, res, next);
@@ -112,7 +109,7 @@ describe("configuration middleware", () => {
       expect.toMatchMonkeyError(
         new MonkeyError(
           500,
-          'Required configuration doesnt exist: "admin.endpointsEnabled"',
+          'Required configuration doesnt exist: "users.signUp"',
         ),
       ),
     );
@@ -120,8 +117,8 @@ describe("configuration middleware", () => {
   it("should fail for null value", () => {
     //GIVEN
     const req = givenRequest(
-      { path: "admin.endpointsEnabled" },
-      { admin: { endpointsEnabled: null as any } },
+      { path: "users.signUp" },
+      { users: { signUp: null as any } as any },
     );
 
     //WHEN
@@ -132,7 +129,7 @@ describe("configuration middleware", () => {
       expect.toMatchMonkeyError(
         new MonkeyError(
           500,
-          'Required configuration doesnt exist: "admin.endpointsEnabled"',
+          'Required configuration doesnt exist: "users.signUp"',
         ),
       ),
     );
@@ -140,8 +137,8 @@ describe("configuration middleware", () => {
   it("should fail for non booean value", () => {
     //GIVEN
     const req = givenRequest(
-      { path: "admin.endpointsEnabled" },
-      { admin: { endpointsEnabled: "disabled" as any } },
+      { path: "users.signUp" },
+      { users: { signUp: "disabled" as any } as any },
     );
 
     //WHEN
@@ -152,7 +149,7 @@ describe("configuration middleware", () => {
       expect.toMatchMonkeyError(
         new MonkeyError(
           500,
-          'Required configuration is not a boolean: "admin.endpointsEnabled"',
+          'Required configuration is not a boolean: "users.signUp"',
         ),
       ),
     );
@@ -160,8 +157,8 @@ describe("configuration middleware", () => {
   it("should pass for multiple configurations", () => {
     //GIVEN
     const req = givenRequest(
-      [{ path: "maintenance" }, { path: "admin.endpointsEnabled" }],
-      { maintenance: true, admin: { endpointsEnabled: true } },
+      [{ path: "maintenance" }, { path: "users.signUp" }],
+      { maintenance: true, users: { signUp: true } as any },
     );
 
     //WHEN
@@ -175,9 +172,9 @@ describe("configuration middleware", () => {
     const req = givenRequest(
       [
         { path: "maintenance", invalidMessage: "maintenance mode" },
-        { path: "admin.endpointsEnabled", invalidMessage: "admin disabled" },
+        { path: "users.signUp", invalidMessage: "signup disabled" },
       ],
-      { maintenance: true, admin: { endpointsEnabled: false } },
+      { maintenance: true, users: { signUp: false } as any },
     );
 
     //WHEN
@@ -185,7 +182,7 @@ describe("configuration middleware", () => {
 
     //THEN
     expect(next).toHaveBeenCalledWith(
-      expect.toMatchMonkeyError(new MonkeyError(503, "admin disabled")),
+      expect.toMatchMonkeyError(new MonkeyError(503, "signup disabled")),
     );
   });
 });
