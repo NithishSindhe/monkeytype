@@ -1,11 +1,12 @@
 packages:
+  - api
   - frontend
   - backend
   - packages/*
   - frontend/storybook
 
 allowBuilds:
-  '@clerk/shared': set this to true or false
+  "@clerk/shared": true
   "@firebase/util": true
   "@fortawesome/fontawesome-free": true
   "@parcel/watcher": true
