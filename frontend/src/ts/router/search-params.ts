@@ -47,10 +47,7 @@ export const SearchFlagSchema = z
   .catch(undefined);
 
 /** Routes keeping page state (selections, tabs...) in their search params. */
-export type SearchRoutePath =
-  | "/leaderboards"
-  | "/settings"
-  | "/account-settings";
+export type SearchRoutePath = "/settings" | "/account-settings";
 
 /** The validated search params of the route at `TPath`. */
 export type RouteSearch<TPath extends SearchRoutePath> = RouteById<

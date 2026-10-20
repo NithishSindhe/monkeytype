@@ -1,12 +1,9 @@
 import { JSXElement } from "solid-js";
 
-import { applyPendingInboxActions } from "../../../collections/inbox";
 import { hideModalAndClearChain } from "../../../states/modals";
 import { AnimatedModal } from "../../common/AnimatedModal";
 import { Button } from "../../common/Button";
-import { Inbox } from "./Inbox";
 import { NotificationHistory } from "./NotificationHistory";
-import { Psas } from "./Psas";
 
 export function AlertsModal(): JSXElement {
   return (
@@ -27,18 +24,9 @@ export function AlertsModal(): JSXElement {
       }}
       onEscape={() => hideModalAndClearChain("Alerts")}
       onBackdropClick={() => hideModalAndClearChain("Alerts")}
-      afterHide={() => {
-        setTimeout(() => {
-          applyPendingInboxActions();
-        }, 125);
-      }}
     >
       <MobileClose />
       <div class="grid h-full content-baseline gap-8 overflow-y-scroll px-4 text-xs">
-        <Inbox />
-        <Separator />
-        <Psas />
-        <Separator />
         <NotificationHistory />
       </div>
     </AnimatedModal>
@@ -54,8 +42,4 @@ function MobileClose(): JSXElement {
       fa={{ icon: "fa-times" }}
     />
   );
-}
-
-function Separator(): JSXElement {
-  return <div class="h-1 rounded bg-sub-alt"></div>;
 }

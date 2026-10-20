@@ -1,9 +1,7 @@
 import { getFunbox } from "@monkeytype/funbox";
-import { isSafeNumber, roundTo2 } from "@monkeytype/util/numbers";
-import { Link } from "@tanstack/solid-router";
+import { roundTo2 } from "@monkeytype/util/numbers";
 import {
   createMemo,
-  createResource,
   createSignal,
   For,
   JSXElement,
@@ -22,19 +20,11 @@ import { getFormatting, isAuthenticated } from "../../../../states/core";
 import { showEditResultTagsModal } from "../../../../states/edit-result-tags";
 import { hideLoaderBar, showLoaderBar } from "../../../../states/loader-bar";
 import { addNotificationWithLevel } from "../../../../states/notifications";
-import {
-  getQuoteStats,
-  quoteStats,
-  showQuoteRateModal,
-} from "../../../../states/quote-rate";
-import { showQuoteReportModal } from "../../../../states/quote-report";
 import { ResultDetails, resultState } from "../../../../states/result";
-import { getSnapshot } from "../../../../states/snapshot";
 import { CompletedResult } from "../../../../states/test";
 import { cn } from "../../../../utils/cn";
 import { secondsToString } from "../../../../utils/date-and-time";
 import { getLanguageDisplayString } from "../../../../utils/strings";
-import { AnimeShow } from "../../../common/anime";
 import { Balloon } from "../../../common/Balloon";
 import { Button } from "../../../common/Button";
 import { Fa } from "../../../common/Fa";
@@ -153,36 +143,6 @@ export function ResultSecondaryStats(props: Props): JSXElement {
         </Balloon>
       </div>
 
-      <AnimeShow
-        when={resultState.dailyLeaderboardRank !== undefined}
-        duration={250}
-        class="max-w-52 whitespace-nowrap"
-      >
-        <div class="text-sub">daily leaderboard</div>
-        <Link
-          to="/leaderboards"
-          search={{
-            type: "daily",
-            language: props.result.language,
-            mode2: props.result.mode2,
-            goToUserPage: true,
-          }}
-        >
-          <Balloon
-            data-ui-element="resultStatValue"
-            text="Show daily leaderboard"
-            class={cn(
-              "block text-[2em] leading-[1em] text-main",
-              mobileBalloonClass,
-            )}
-          >
-            {format().rank(resultState.dailyLeaderboardRank, {
-              fallback: "",
-            })}
-          </Balloon>
-        </Link>
-      </AnimeShow>
-
       <Show when={resultState.details?.quote}>
         {(quote) => <QuoteSource quote={quote()} />}
       </Show>
@@ -288,24 +248,6 @@ function QuoteButtons(props: { quote: Quote }): JSXElement {
     favoritesVersion();
     return QuotesController.isQuoteFavorite(props.quote);
   };
-  // fills quoteStats() in states/quote-rate, which the rate modal also updates
-  // keyed on the details too, since restart clears stats and a repeated quote is the same object.
-  // not the result - it's set before the details, so it would fetch the previous quote
-  const [statsRequest] = createResource(
-    () => ({ quote: props.quote, details: resultState.details }),
-    async ({ quote }) => getQuoteStats(quote),
-  );
-
-  const isRated = (): boolean =>
-    isSafeNumber(
-      getSnapshot()?.quoteRatings?.[props.quote.language]?.[props.quote.id],
-    );
-
-  const rating = (): string => {
-    if (statsRequest.error !== undefined) return "?";
-    return quoteStats()?.average?.toFixed(1) ?? "";
-  };
-
   const toggleFavorite = async (): Promise<void> => {
     const dbSnapshot = DB.getSnapshot();
     if (!dbSnapshot) return;
@@ -339,38 +281,17 @@ function QuoteButtons(props: { quote: Quote }): JSXElement {
   };
 
   return (
-    <>
-      <Button
-        variant="text"
-        class="-my-1 p-1"
-        balloon={{ text: "Report quote" }}
-        fa={{ icon: "fa-flag", fixedWidth: true }}
-        onClick={() => showQuoteReportModal(props.quote.id)}
-      />
-      <Button
-        variant="text"
-        class="-my-1 p-1"
-        balloon={{ text: "Favorite quote" }}
-        fa={{
-          icon: "fa-heart",
-          variant: isFavorite() ? "solid" : "regular",
-          fixedWidth: true,
-        }}
-        onClick={() => void toggleFavorite()}
-      />
-      <Button
-        variant="text"
-        class="-my-1 p-1"
-        balloon={{ text: "Rate quote" }}
-        fa={{
-          icon: "fa-star",
-          variant: isRated() ? "solid" : "regular",
-          fixedWidth: true,
-        }}
-        text={rating()}
-        onClick={() => showQuoteRateModal(props.quote)}
-      />
-    </>
+    <Button
+      variant="text"
+      class="-my-1 p-1"
+      balloon={{ text: "Favorite quote" }}
+      fa={{
+        icon: "fa-heart",
+        variant: isFavorite() ? "solid" : "regular",
+        fixedWidth: true,
+      }}
+      onClick={() => void toggleFavorite()}
+    />
   );
 }
 

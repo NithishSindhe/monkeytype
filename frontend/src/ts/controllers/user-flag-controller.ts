@@ -14,26 +14,11 @@ const flags: UserFlag[] = [
     color: "var(--error-color)",
     test: (it) => it.banned === true,
   },
-  {
-    name: "LbOptOut",
-    description: "This account has opted out of leaderboards",
-    icon: "fa-crown",
-    color: "var(--error-color)",
-    test: (it) => it.lbOptOut === true,
-  },
-  {
-    name: "Friend",
-    description: "Friend :)",
-    icon: "fa-user-friends",
-    test: (it) => it.isFriend === true,
-  },
 ];
 
 export type SupportsFlags = {
   isPremium?: boolean;
   banned?: boolean;
-  lbOptOut?: boolean;
-  isFriend?: boolean;
 };
 
 export type UserFlag = {
@@ -47,7 +32,6 @@ export type UserFlag = {
 
 export type UserFlagOptions = {
   iconsOnly?: boolean;
-  isFriend?: boolean;
 };
 
 const USER_FLAG_OPTIONS_DEFAULT: UserFlagOptions = {

@@ -40,32 +40,6 @@ export function showDeleteAccountModal(): void {
   });
 }
 
-export function showOptOutOfLeaderboardsModal(): void {
-  showReauthConfirmModal({
-    title: "Opt out of leaderboards",
-    buttonText: "opt out",
-    confirmText: `I understand that my account will be removed from all leaderboards and that this cannot be undone.`,
-
-    action: async () => {
-      const response = await Ape.users.optOutOfLeaderboards();
-      if (response.status !== 200) {
-        return {
-          status: "error",
-          message: "Failed to opt out",
-          notificationOptions: { response },
-        };
-      }
-
-      reloadAfter(3);
-
-      return {
-        status: "success",
-        message: "Leaderboards opt out successful",
-      };
-    },
-  });
-}
-
 export function showResetAccountModal(): void {
   showReauthConfirmModal({
     title: "Reset account",

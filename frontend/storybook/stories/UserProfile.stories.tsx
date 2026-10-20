@@ -13,7 +13,6 @@ const baseProfile: UserProfileType = {
   maxStreak: 30,
   isPremium: false,
   banned: false,
-  lbOptOut: false,
   typingStats: {
     completedTests: 1234,
     startedTests: 1500,
@@ -170,32 +169,6 @@ export const AccountPage = meta.story({
   render: () => <UserProfile profile={baseProfile} isAccountPage />,
 });
 
-export const WithLeaderboard = meta.story({
-  render: () => (
-    <UserProfile
-      profile={{
-        ...baseProfile,
-        allTimeLbs: {
-          time: {
-            "15": {
-              english: {
-                rank: 42,
-                count: 50000,
-              },
-            },
-            "60": {
-              english: {
-                rank: 156,
-                count: 50000,
-              },
-            },
-          },
-        },
-      }}
-    />
-  ),
-});
-
 export const Banned = meta.story({
   render: () => (
     <UserProfile
@@ -204,17 +177,6 @@ export const Banned = meta.story({
         banned: true,
         details: undefined,
         inventory: undefined,
-      }}
-    />
-  ),
-});
-
-export const LbOptOut = meta.story({
-  render: () => (
-    <UserProfile
-      profile={{
-        ...baseProfile,
-        lbOptOut: true,
       }}
     />
   ),

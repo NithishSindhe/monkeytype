@@ -31,8 +31,6 @@ export const Default = meta.story({
     const data = {
       uid: "user123",
       name: "monkeytyper",
-      discordId: "102819690287489024",
-      discordAvatar: "a_af6c0b8ad26fdd6bcb86ed7bb40ee6e5",
       isPremium: true,
       banned: true,
     };
@@ -42,11 +40,9 @@ export const Default = meta.story({
         <User user={{ ...data }} />
         <div class="text-sub">No avatar:</div>
         <User user={{ ...data }} showAvatar={false} />
-        <div class="text-sub">Avatar fallback:</div>
-        <User user={{ ...data, discordAvatar: "" }} />
-        <div class="text-sub">Avatar fallback with color:</div>
+        <div class="text-sub">Avatar with color:</div>
         <User
-          user={{ ...data, discordAvatar: "" }}
+          user={{ ...data }}
           avatarFallback="user-circle"
           avatarColor="sub"
         />
@@ -76,8 +72,6 @@ export const WithBadge = meta.story({
       user={{
         uid: "user123",
         name: "monkeytyper",
-        discordId: undefined,
-        discordAvatar: undefined,
         badgeId: 1,
       }}
     />
@@ -90,25 +84,9 @@ export const Premium = meta.story({
       user={{
         uid: "user123",
         name: "monkeytyper",
-        discordId: undefined,
-        discordAvatar: undefined,
         badgeId: 6,
         isPremium: true,
       }}
-    />
-  ),
-});
-
-export const Friend = meta.story({
-  render: () => (
-    <User
-      user={{
-        uid: "user123",
-        name: "monkeytyper",
-        discordId: undefined,
-        discordAvatar: undefined,
-      }}
-      isFriend
     />
   ),
 });
@@ -119,8 +97,6 @@ export const Banned = meta.story({
       user={{
         uid: "user123",
         name: "monkeytyper",
-        discordId: undefined,
-        discordAvatar: undefined,
         banned: true,
       }}
     />
@@ -133,8 +109,6 @@ export const NoAvatar = meta.story({
       user={{
         uid: "user123",
         name: "monkeytyper",
-        discordId: undefined,
-        discordAvatar: undefined,
         badgeId: 13,
         isPremium: true,
       }}
@@ -149,12 +123,9 @@ export const FullyLoaded = meta.story({
       user={{
         uid: "user123",
         name: "monkeytyper",
-        discordId: undefined,
-        discordAvatar: undefined,
         badgeId: 1,
         isPremium: true,
       }}
-      isFriend
     />
   ),
 });

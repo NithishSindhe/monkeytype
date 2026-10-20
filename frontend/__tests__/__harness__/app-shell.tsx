@@ -33,14 +33,11 @@
  *   waits for the test.
  * - `loadingBar()` reads the loading page's bar (fill width, text). The fill
  *   jumps straight to each target. `loadingIndicator()`: spinner, bar or error.
- * - Blocking downloads (`results`, `friends`: "pending"): real query
- *   collections (the app's retry options) fetching from a fake server.
+ * - Blocking downloads (`results`: "pending"): a real query collection (the
+ *   app's retry options) fetching from a fake server.
  *   `app.blockingData.loadResults()` / `failResults(error)` (fails the fetch
  *   and its retries, like a down server; a new fetch, eg. Retry, waits again),
- *   `requests(download)` counts the requests sent.
- * - Slow navigations (pending spinner): `friendsRefresh: "pending"` hangs the
- *   friends page's refetch (not a loading step) until
- *   `app.blockingData.refreshFriends()`. Use fake timers (setTimeout,
+ *   `requests(download)` counts the requests sent. Use fake timers (setTimeout,
  *   clearTimeout, Date, requestAnimationFrame, cancelAnimationFrame);
  *   `flush()` then moves the clock by one frame.
  * - Pages are stubs rendering their name, except the real loading page (its
@@ -112,31 +109,8 @@ export type PageMount = { page: string; attached: boolean };
 
 const { pageMounts, pageContent, blockingData } = vi.hoisted(() => {
   type Waiting = { resolve: () => void; reject: (error: Error) => void };
-  // the friends page's refetch on every visit, ready by default
-  function readiness(): {
-    ready: boolean;
-    set: (ready: boolean) => void;
-    wait: () => Promise<void>;
-  } {
-    const waiting: Waiting[] = [];
-    const state = {
-      ready: true,
-      set: (ready: boolean) => {
-        state.ready = ready;
-        if (!ready) return;
-        for (const { resolve } of waiting.splice(0)) resolve();
-      },
-      wait: async () => {
-        if (state.ready) return;
-        return new Promise<void>((resolve, reject) =>
-          waiting.push({ resolve, reject }),
-        );
-      },
-    };
-    return state;
-  }
   /**
-   * The server side of a blocking download (results, friends), ready by
+   * The server side of a blocking download (results), ready by
    * default. A real query collection (made by renderApp) fetches from it.
    */
   function server(): {
@@ -187,20 +161,18 @@ const { pageMounts, pageContent, blockingData } = vi.hoisted(() => {
     pageContent: new Map<string, () => JSXElement>(),
     blockingData: {
       results: server(),
-      friends: server(),
-      friendsRefresh: readiness(),
     },
   };
 });
 
-function downloadCollection(name: "results" | "friends"): DownloadCollection {
+function downloadCollection(name: "results"): DownloadCollection {
   const collection = blockingData[name].collection;
   if (collection === undefined) throw new Error("app not rendered");
   return collection;
 }
 
-// results and friends are collections synced outside the router context: the
-// harness swaps them for collections downloading from its fake server
+// results is a collection synced outside the router context: the
+// harness swaps it for a collection downloading from its fake server
 vi.mock(import("../../src/ts/collections/results"), async (importOriginal) => {
   const { isDownloaded, waitForDownload } =
     await import("../../src/ts/collections/utils/blocking-download");
@@ -211,22 +183,6 @@ vi.mock(import("../../src/ts/collections/results"), async (importOriginal) => {
       waitForDownload(downloadCollection("results")),
   };
 });
-vi.mock(
-  import("../../src/ts/collections/connections"),
-  async (importOriginal) => {
-    const { isDownloaded, waitForDownload } =
-      await import("../../src/ts/collections/utils/blocking-download");
-    return {
-      ...(await importOriginal()),
-      isConnectionsReady: () => isDownloaded(downloadCollection("friends")),
-      waitForConnectionsReady: async () =>
-        waitForDownload(downloadCollection("friends")),
-      // the friends page refetches its connections on every visit
-      invalidateConnections: blockingData.friendsRefresh.wait,
-    };
-  },
-);
-
 // animations finish as soon as they start
 vi.mock("animejs", () => ({
   animate: (
@@ -273,14 +229,6 @@ vi.mock(
 vi.mock(
   "../../src/ts/components/pages/account/AccountPage",
   stubPage("AccountPage"),
-);
-vi.mock(
-  "../../src/ts/components/pages/connections/FriendsPage",
-  stubPage("FriendsPage"),
-);
-vi.mock(
-  "../../src/ts/components/pages/leaderboard/LeaderboardPage",
-  stubPage("LeaderboardPage"),
 );
 vi.mock("../../src/ts/components/pages/login/LoginPage", stubPage("LoginPage"));
 vi.mock(
@@ -425,16 +373,8 @@ export type RenderAppOptions = {
   queryResponses?: [QueryKey, () => Promise<unknown>][];
   /** Account results download. Default "ready". */
   results?: "ready" | "pending";
-  /** Friends download. Default "ready". */
-  friends?: "ready" | "pending";
   /**
-   * The friends refetch on every visit of the friends page, not a loading
-   * step: "pending" makes a navigation to friends unexpectedly slow.
-   * Default "ready".
-   */
-  friendsRefresh?: "ready" | "pending";
-  /**
-   * Extra content for stub pages by component name (eg. `LeaderboardPage`),
+   * Extra content for stub pages by component name (eg. `AboutPage`),
    * rendered inside the page - for probes using the page's hooks.
    */
   pageContent?: Record<string, () => JSXElement>;
@@ -474,17 +414,13 @@ export type App = {
    * loading page.
    */
   settle: (options?: { waitForRouter?: boolean }) => Promise<void>;
-  /** Finishes pending blocking data downloads (and the friends refetch). */
+  /** Finishes pending blocking data downloads. */
   blockingData: {
     loadResults: () => void;
-    loadFriends: () => void;
-    refreshFriends: () => void;
     /** Fails the results download, its retries too (a new download waits again). */
     failResults: (error: Error) => void;
-    /** Fails the friends download, its retries too (a new download waits again). */
-    failFriends: (error: Error) => void;
     /** Requests the download sent to the server so far (retries included). */
-    requests: (download: "results" | "friends") => number;
+    requests: (download: "results") => number;
   };
   /** The loading page's bar (fill width, text below it), undefined if not shown. */
   loadingBar: () => LoadingBar | undefined;
@@ -556,12 +492,8 @@ export function renderApp(options: RenderAppOptions = {}): App {
     queryClient.respond(key, fetch);
   }
   blockingData.results.set(options.results !== "pending");
-  blockingData.friends.set(options.friends !== "pending");
   blockingData.results.requests = 0;
-  blockingData.friends.requests = 0;
   blockingData.results.collection = createDownloadCollection("results");
-  blockingData.friends.collection = createDownloadCollection("friends");
-  blockingData.friendsRefresh.set(options.friendsRefresh !== "pending");
   // the account route checks the user data downloaded
   setSnapshot(options.auth === "signedIn" ? getDefaultSnapshot() : undefined, {
     dispatchEvent: false,
@@ -650,10 +582,7 @@ export function renderApp(options: RenderAppOptions = {}): App {
     settle,
     blockingData: {
       loadResults: () => blockingData.results.set(true),
-      loadFriends: () => blockingData.friends.set(true),
-      refreshFriends: () => blockingData.friendsRefresh.set(true),
       failResults: (error) => blockingData.results.fail(error),
-      failFriends: (error) => blockingData.friends.fail(error),
       requests: (download) => blockingData[download].requests,
     },
     loadingBar: () => {
@@ -701,7 +630,7 @@ export function cleanupApp(): void {
   setResultCalculating(false);
   configTesting.replaceConfig({});
   setSnapshot(undefined, { dispatchEvent: false });
-  for (const name of ["results", "friends"] as const) {
+  for (const name of ["results"] as const) {
     void blockingData[name].collection?.cleanup();
     blockingData[name].collection = undefined;
   }
@@ -710,13 +639,13 @@ export function cleanupApp(): void {
 type DownloadCollection = ReturnType<typeof createDownloadCollection>;
 
 /**
- * A real query collection (like the app's results and friends) downloading
+ * A real query collection (like the app's results) downloading
  * from the harness server: already downloaded when the server is ready.
  * Else, like the app's, it starts downloading only once something reads it
  * (a loader, a hover's preload), not at sign in.
  */
 // oxlint-disable-next-line typescript/explicit-function-return-type
-function createDownloadCollection(name: "results" | "friends") {
+function createDownloadCollection(name: "results") {
   const server = blockingData[name];
   const queryKey = ["harness", name];
   const queryClient = new QueryClient();

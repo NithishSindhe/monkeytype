@@ -12,16 +12,16 @@ import { cn } from "../../utils/cn";
 import { Anime } from "./anime";
 import { AnimePresence } from "./anime/AnimePresence";
 import { Button } from "./Button";
-import { DiscordAvatar } from "./DiscordAvatar";
 import { Fa } from "./Fa";
 import { NotificationBubble } from "./NotificationBubble";
+import { UserAvatar } from "./UserAvatar";
 import { UserBadge } from "./UserBadge";
 import { UserFlags } from "./UserFlags";
 
 type Props = {
   class?: string;
   user: SupportsFlags &
-    Pick<UserType, "uid" | "name" | "discordId" | "discordAvatar" | "xp"> & {
+    Pick<UserType, "uid" | "name" | "xp"> & {
       badgeId?: number;
     };
   showAvatar?: boolean;
@@ -96,11 +96,8 @@ export function User(props: Props): JSXElement {
                     animate={{ opacity: 1, duration: 125 }}
                     exit={{ opacity: 0, duration: 125 }}
                   >
-                    <DiscordAvatar
-                      size={64}
-                      discordId={props.user.discordId}
-                      discordAvatar={props.user.discordAvatar}
-                      fallbackIcon={props.avatarFallback ?? "user"}
+                    <UserAvatar
+                      icon={props.avatarFallback ?? "user"}
                       class={cn(
                         props.avatarColor === "text" && "text-text",
                         props.avatarColor === "sub" && "text-sub",
@@ -137,12 +134,7 @@ export function User(props: Props): JSXElement {
         </Show>
       </div>
 
-      <Show
-        when={
-          getMatchingFlags({ ...props.user, isFriend: props.isFriend }).length >
-          0
-        }
-      >
+      <Show when={getMatchingFlags(props.user).length > 0}>
         <div
           class={cn(
             "flex items-center justify-center gap-[0.5em]",
@@ -152,11 +144,7 @@ export function User(props: Props): JSXElement {
             ),
           )}
         >
-          <UserFlags
-            {...props.user}
-            isFriend={props.isFriend}
-            iconsOnly={props.iconsOnly}
-          />
+          <UserFlags {...props.user} iconsOnly={props.iconsOnly} />
         </div>
       </Show>
       <Show when={props.user.badgeId !== undefined}>

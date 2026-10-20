@@ -14,14 +14,11 @@ import { formatDate } from "date-fns/format";
 import { formatDistanceToNowStrict } from "date-fns/formatDistanceToNowStrict";
 import { For, JSXElement, Show } from "solid-js";
 
-import { addConnection, hasConnection } from "../../../collections/connections";
 import { Snapshot } from "../../../constants/default-snapshot";
 import { bp } from "../../../states/breakpoints";
-import { getUserId, isAuthenticated } from "../../../states/core";
 import { showModal } from "../../../states/modals";
 import { showNoticeNotification } from "../../../states/notifications";
 import { getLastResult } from "../../../states/snapshot";
-import { setUserToReport } from "../../../states/user-report";
 import { cn } from "../../../utils/cn";
 import { secondsToString } from "../../../utils/date-and-time";
 import { formatXp, getXpDetails } from "../../../utils/levels";
@@ -30,7 +27,7 @@ import { AutoShrink } from "../../common/AutoShrink";
 import { Balloon, BalloonProps } from "../../common/Balloon";
 import { Bar } from "../../common/Bar";
 import { Button } from "../../common/Button";
-import { DiscordAvatar } from "../../common/DiscordAvatar";
+import { UserAvatar } from "../../common/UserAvatar";
 import { UserBadge } from "../../common/UserBadge";
 import { UserFlags } from "../../common/UserFlags";
 import { EditProfile } from "../../modals/EditProfileModal";
@@ -107,58 +104,8 @@ function ActionButtons(props: {
   profile: UserProfile;
   isAccountPage?: true;
 }): JSXElement {
-  const isUsersProfile = () =>
-    props.profile.uid !== undefined &&
-    props.profile.uid === (getUserId() ?? "");
-
-  const showFriendsButton = () =>
-    isAuthenticated() && !isUsersProfile() && !hasConnection(props.profile.uid);
-
-  const handleAddFriend = () => {
-    void addConnection({
-      receiverName: props.profile.name,
-      receiverUid: props.profile.uid,
-    });
-  };
-
   return (
-    <Show
-      when={props.isAccountPage === true}
-      fallback={
-        <>
-          <Show when={!isUsersProfile()}>
-            <Button
-              balloon={{ text: "Report user", position: "left" }}
-              class={cn(
-                "h-full rounded-none rounded-tr text-sub hover:text-bg",
-                {
-                  "rounded-br": !showFriendsButton(),
-                },
-              )}
-              fa={{ icon: "fa-flag", fixedWidth: true }}
-              onClick={() => {
-                if (!isAuthenticated()) {
-                  showNoticeNotification(
-                    "You must be logged in to submit a report",
-                  );
-                  return;
-                }
-                setUserToReport(props.profile);
-                showModal("UserReport");
-              }}
-            />
-          </Show>
-          <Show when={showFriendsButton()}>
-            <Button
-              balloon={{ text: "Send friend request", position: "left" }}
-              class="h-full rounded-none rounded-br text-sub hover:text-bg"
-              fa={{ icon: "fa-user-plus", fixedWidth: true }}
-              onClick={() => handleAddFriend()}
-            />
-          </Show>
-        </>
-      }
-    >
+    <Show when={props.isAccountPage === true} fallback={null}>
       <Button
         balloon={{ text: "Edit profile", position: "left" }}
         class="h-full rounded-none rounded-tr text-sub hover:text-bg"
@@ -264,22 +211,14 @@ function AvatarAndName(props: {
         props.variant === "hasSocials" && "sm:col-span-2 md:col-span-1",
       )}
     >
-      <DiscordAvatar
-        class="h-auto w-full place-self-center"
-        size={256}
-        discordAvatar={props.profile.discordAvatar}
-        discordId={props.profile.discordId}
-      />
+      <UserAvatar class="h-auto w-full place-self-center" />
 
       <div class="flex h-min flex-col gap-1 text-xs [&>div]:w-fit">
         <AutoShrink upperLimitRem={2} class="flex text-text">
           {props.profile.name}
 
           <div class="flex flex-row gap-1 pl-1 text-sub">
-            <UserFlags
-              {...props.profile}
-              isFriend={hasConnection(props.profile.uid, "accepted")}
-            />
+            <UserFlags {...props.profile} />
           </div>
         </AutoShrink>
         <div class="flex flex-col gap-1 text-base">

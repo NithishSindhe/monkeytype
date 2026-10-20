@@ -272,9 +272,9 @@ describe("Button component", () => {
       <RouterContextProvider router={router}>
         {() => (
           <Button
-            to="/leaderboards"
-            search={{ type: "daily", mode2: "15" }}
-            text="Leaderboards"
+            to="/settings"
+            search={{ highlight: "difficulty" }}
+            text="Settings"
           />
         )}
       </RouterContextProvider>
@@ -282,7 +282,7 @@ describe("Button component", () => {
 
     expect(container.querySelector("a")).toHaveAttribute(
       "href",
-      "/leaderboards?type=daily&mode2=15",
+      "/settings?highlight=difficulty",
     );
   });
 
@@ -361,7 +361,6 @@ function createTestRouter(path = "/"): AnyRouter {
     routeTree: root.addChildren([
       createRoute({ getParentRoute: () => root, path: "/" }),
       createRoute({ getParentRoute: () => root, path: "/settings" }),
-      createRoute({ getParentRoute: () => root, path: "/leaderboards" }),
       createRoute({ getParentRoute: () => root, path: "/profile" }),
       createRoute({
         getParentRoute: () => root,

@@ -9,24 +9,17 @@ import {
 } from "solid-js";
 import { z } from "zod";
 
-import Ape from "../../ape";
 import { setConfig } from "../../config/setters";
 import { Config } from "../../config/store";
 import QuotesController, { Quote } from "../../controllers/quotes-controller";
-import * as DB from "../../db";
 import { createDebouncedEffectOn } from "../../hooks/effects";
 import { isAuthenticated } from "../../states/core";
 import { hideLoaderBar, showLoaderBar } from "../../states/loader-bar";
-import {
-  hideModalAndClearChain,
-  isModalOpen,
-  showModal,
-} from "../../states/modals";
+import { hideModalAndClearChain, isModalOpen } from "../../states/modals";
 import {
   showNoticeNotification,
   showErrorNotification,
 } from "../../states/notifications";
-import { showQuoteReportModal } from "../../states/quote-report";
 import { showSimpleModal } from "../../states/simple-modal";
 import { setSelectedQuoteId } from "../../states/test";
 import * as TestLogic from "../../test/test-logic";
@@ -43,8 +36,6 @@ import { AnimatedModal } from "../common/AnimatedModal";
 import { Button } from "../common/Button";
 import { InputField } from "../ui/form/InputField";
 import SlimSelect from "../ui/SlimSelect";
-import { QuoteApproveModal } from "./QuoteApproveModal";
-import { QuoteSubmitModal } from "./QuoteSubmitModal";
 
 const PAGE_SIZE = 100;
 
@@ -103,7 +94,6 @@ function Item(props: {
   matchedTerms: string[];
   isRtl: boolean;
   onSelect: () => void;
-  onReport: () => void;
   onToggleFavorite: () => Promise<boolean>;
 }): JSXElement {
   const loggedOut = (): boolean => !isAuthenticated();
@@ -166,18 +156,6 @@ function Item(props: {
             <div class="flex shrink">
               <Button
                 variant="text"
-                fa={{ icon: "fa-flag" }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  props.onReport();
-                }}
-                balloon={{
-                  text: "Report quote",
-                  position: props.isRtl ? "right" : "left",
-                }}
-              />
-              <Button
-                variant="text"
                 fa={{
                   icon: "fa-heart",
                   variant: isFav() ? "solid" : "regular",
@@ -232,14 +210,6 @@ export function QuoteSearchModal(): JSXElement {
   );
 
   const isOpen = (): boolean => isModalOpen("QuoteSearch");
-
-  const isQuoteMod = (): boolean => {
-    const quoteMod = DB.getSnapshot()?.quoteMod;
-    return (
-      quoteMod !== undefined &&
-      (quoteMod === true || (quoteMod as string) !== "")
-    );
-  };
 
   const performSearch = (text: string): void => {
     const allQuotes = quotes();
@@ -431,148 +401,109 @@ export function QuoteSearchModal(): JSXElement {
     }
   };
 
-  const handleSubmitClick = async (): Promise<void> => {
-    showLoaderBar();
-    const getSubmissionEnabled = await Ape.quotes.isSubmissionEnabled();
-    const isEnabled =
-      (getSubmissionEnabled.status === 200 &&
-        getSubmissionEnabled.body.data?.isEnabled) ??
-      false;
-    hideLoaderBar();
-    if (!isEnabled) {
-      showNoticeNotification(
-        "Quote submission is disabled temporarily due to a large submission queue.",
-        { durationMs: 5000 },
-      );
-      return;
-    }
-    showModal("QuoteSubmit");
-  };
-
   return (
-    <>
-      <AnimatedModal
-        id="QuoteSearch"
-        focusFirstInput={true}
-        beforeShow={handleBeforeShow}
-        afterShow={handleAfterShow}
-        modalClass="max-w-[1000px] h-[80vh] grid-rows-[auto_auto_1fr_auto]"
-      >
-        <div class="flex flex-col justify-between gap-2 sm:flex-row">
-          <div class="text-2xl text-sub">Quote search</div>
-          <div class="grid gap-2">
-            <Show when={isAuthenticated()}>
-              <Button
-                fa={{ icon: "fa-plus" }}
-                text="Submit a quote"
-                onClick={() => void handleSubmitClick()}
-              />
-            </Show>
-            <Show when={isQuoteMod()}>
-              <Button
-                fa={{ icon: "fa-check" }}
-                text="Approve quotes"
-                onClick={() => showModal("QuoteApprove")}
-              />
-            </Show>
-          </div>
-        </div>
-        <div class="flex flex-col gap-4 sm:flex-row">
-          <form.Field
-            name="searchText"
-            listeners={{
-              onChange: ({ value }) => {
-                if (!isOpen()) return;
-                setSearchText(value);
-              },
+    <AnimatedModal
+      id="QuoteSearch"
+      focusFirstInput={true}
+      beforeShow={handleBeforeShow}
+      afterShow={handleAfterShow}
+      modalClass="max-w-[1000px] h-[80vh] grid-rows-[auto_auto_1fr_auto]"
+    >
+      <div class="flex flex-col justify-between gap-2 sm:flex-row">
+        <div class="text-2xl text-sub">Quote search</div>
+      </div>
+      <div class="flex flex-col gap-4 sm:flex-row">
+        <form.Field
+          name="searchText"
+          listeners={{
+            onChange: ({ value }) => {
+              if (!isOpen()) return;
+              setSearchText(value);
+            },
+          }}
+          children={(field) => (
+            <InputField
+              class="grow-3"
+              field={field}
+              placeholder="filter by text, source or id"
+              autocomplete="off"
+              dir="auto"
+              maxLength={200}
+            />
+          )}
+        />
+        <div class="grow">
+          <SlimSelect
+            appendTo="container"
+            multiple
+            options={[
+              { value: "0", text: "short" },
+              { value: "1", text: "medium" },
+              { value: "2", text: "long" },
+              { value: "3", text: "thicc" },
+              { value: "4", text: "custom" },
+            ]}
+            selected={lengthFilter()}
+            onChange={(val) => setLengthFilter(val)}
+            settings={{
+              showSearch: false,
+              placeholderText: "filter by length",
             }}
-            children={(field) => (
-              <InputField
-                class="grow-3"
-                field={field}
-                placeholder="filter by text, source or id"
-                autocomplete="off"
-                dir="auto"
-                maxLength={200}
-              />
-            )}
           />
-          <div class="grow">
-            <SlimSelect
-              appendTo="container"
-              multiple
-              options={[
-                { value: "0", text: "short" },
-                { value: "1", text: "medium" },
-                { value: "2", text: "long" },
-                { value: "3", text: "thicc" },
-                { value: "4", text: "custom" },
-              ]}
-              selected={lengthFilter()}
-              onChange={(val) => setLengthFilter(val)}
-              settings={{
-                showSearch: false,
-                placeholderText: "filter by length",
-              }}
-            />
-          </div>
-          <Show when={isAuthenticated()}>
-            <Button
-              variant="button"
-              fa={{ icon: "fa-heart", fixedWidth: true }}
-              active={showFavoritesOnly()}
-              onClick={() => setShowFavoritesOnly((v) => !v)}
-            />
-          </Show>
         </div>
-        <div
-          class="grid content-baseline gap-2 overflow-y-auto"
-          dir={isRtl() ? "rtl" : undefined}
-        >
-          <For each={pageQuotes()}>
-            {(quote) => (
-              <Item
-                quote={quote}
-                matchedTerms={searchResults().matchedTerms}
-                isRtl={isRtl()}
-                onSelect={() => applyQuote(quote.id)}
-                onReport={() => showQuoteReportModal(quote.id)}
-                // oxlint-disable-next-line solid/reactivity, typescript-eslint/promise-function-async -- fire-and-forget, no reactive tracking needed
-                onToggleFavorite={() => toggleFavorite(quote)}
-              />
-            )}
-          </For>
-        </div>
+        <Show when={isAuthenticated()}>
+          <Button
+            variant="button"
+            fa={{ icon: "fa-heart", fixedWidth: true }}
+            active={showFavoritesOnly()}
+            onClick={() => setShowFavoritesOnly((v) => !v)}
+          />
+        </Show>
+      </div>
+      <div
+        class="grid content-baseline gap-2 overflow-y-auto"
+        dir={isRtl() ? "rtl" : undefined}
+      >
+        <For each={pageQuotes()}>
+          {(quote) => (
+            <Item
+              quote={quote}
+              matchedTerms={searchResults().matchedTerms}
+              isRtl={isRtl()}
+              onSelect={() => applyQuote(quote.id)}
+              // oxlint-disable-next-line solid/reactivity, typescript-eslint/promise-function-async -- fire-and-forget, no reactive tracking needed
+              onToggleFavorite={() => toggleFavorite(quote)}
+            />
+          )}
+        </For>
+      </div>
+      <div
+        class={cn(
+          "grid grid-cols-2 items-center justify-center gap-2",
+          "sm:grid-cols-3",
+        )}
+      >
+        <Button
+          class="justify-self-end px-10 sm:w-max"
+          fa={{ icon: "fa-chevron-left", fixedWidth: true }}
+          disabled={currentPage() <= 1}
+          onClick={() => setCurrentPage((p) => p - 1)}
+        />
         <div
           class={cn(
-            "grid grid-cols-2 items-center justify-center gap-2",
-            "sm:grid-cols-3",
+            "col-span-2 row-start-1 px-4 text-center text-sub",
+            "sm:col-span-1 sm:row-auto",
           )}
         >
-          <Button
-            class="justify-self-end px-10 sm:w-max"
-            fa={{ icon: "fa-chevron-left", fixedWidth: true }}
-            disabled={currentPage() <= 1}
-            onClick={() => setCurrentPage((p) => p - 1)}
-          />
-          <div
-            class={cn(
-              "col-span-2 row-start-1 px-4 text-center text-sub",
-              "sm:col-span-1 sm:row-auto",
-            )}
-          >
-            {pageInfo()}
-          </div>
-          <Button
-            class="px-10 sm:w-max"
-            fa={{ icon: "fa-chevron-right", fixedWidth: true }}
-            disabled={currentPage() >= totalPages()}
-            onClick={() => setCurrentPage((p) => p + 1)}
-          />
+          {pageInfo()}
         </div>
-      </AnimatedModal>
-      <QuoteSubmitModal />
-      <QuoteApproveModal />
-    </>
+        <Button
+          class="px-10 sm:w-max"
+          fa={{ icon: "fa-chevron-right", fixedWidth: true }}
+          disabled={currentPage() >= totalPages()}
+          onClick={() => setCurrentPage((p) => p + 1)}
+        />
+      </div>
+    </AnimatedModal>
   );
 }

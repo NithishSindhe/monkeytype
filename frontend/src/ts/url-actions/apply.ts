@@ -5,7 +5,6 @@ import { createErrorMessage } from "../utils/error";
 import { readUrlAction, UrlAction } from "./action";
 import { challengeAction } from "./actions/challenge";
 import { customThemeAction } from "./actions/custom-theme";
-import { discordTokenAction } from "./actions/discord-oauth";
 import { testSettingsAction } from "./actions/test-settings";
 
 /** The url as the test route sees it. */
@@ -22,7 +21,6 @@ const URL_ACTIONS: UrlAction[] = [
   customThemeAction,
   testSettingsAction,
   challengeAction,
-  discordTokenAction,
 ];
 
 /**

@@ -6,17 +6,13 @@ import {
 } from "../../../states/account-settings";
 import { Button } from "../../common/Button";
 import { AccountTab } from "./AccountTab";
-import { ApeKeysTab } from "./ApeKeysTab";
 import { AuthenticationTab } from "./AuthenticationTab";
-import { BlockedUsersTab } from "./BlockedUsersTab";
 import { DangerZoneTab } from "./DangerZoneTab";
 import { useAccountSettingsTab } from "./useAccountSettingsTab";
 
 const tabContent: Record<AccountSettingsTab, () => JSXElement> = {
   account: () => <AccountTab />,
   authentication: () => <AuthenticationTab />,
-  blockedUsers: () => <BlockedUsersTab />,
-  apeKeys: () => <ApeKeysTab />,
   dangerZone: () => <DangerZoneTab />,
 };
 

@@ -1,26 +1,11 @@
 import type { QueryKey } from "@tanstack/solid-query";
 
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  type MockInstance,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import Ape from "../../src/ts/ape";
-import {
-  getLeaderboardQueryOptions,
-  getRankQueryOptions,
-} from "../../src/ts/queries/leaderboards";
 import { getUserProfile } from "../../src/ts/queries/profile";
 import {
   getContributorsQueryOptions,
-  getSpeedHistogramQueryOptions,
   getSupportersQueryOptions,
-  getTypingStatsQueryOptions,
 } from "../../src/ts/queries/public";
 import { getServerConfigurationQueryOptions } from "../../src/ts/queries/server-configuration";
 import {
@@ -72,7 +57,7 @@ describe("app shell routing", () => {
   });
 
   describe("guards", () => {
-    it.each(["/account", "/account-settings", "/friends"])(
+    it.each(["/account", "/account-settings"])(
       "redirects a signed out user from %s to login",
       async (url) => {
         const app = renderApp({ url, auth: "signedOut" });
@@ -99,7 +84,7 @@ describe("app shell routing", () => {
     });
 
     it("sends guarded pages to the test page when auth is unavailable", async () => {
-      const app = renderApp({ url: "/friends", authAvailable: false });
+      const app = renderApp({ url: "/account", authAvailable: false });
       await app.settle();
 
       expect(app.url()).toBe("/");
@@ -157,7 +142,7 @@ describe("app shell routing", () => {
       await app.settle();
       expect(app.shownPage()).toBe("about");
 
-      await app.navigate({ to: "/friends" });
+      await app.navigate({ to: "/account" });
       await app.settle();
 
       expect(app.url()).toBe("/login");
@@ -179,20 +164,6 @@ describe("app shell routing", () => {
       await app.settle();
 
       expect(app.shownPage()).toBe("settings");
-    });
-
-    it("shows leaderboards straight away with a cached server configuration", async () => {
-      const app = renderApp({
-        url: "/about",
-        queryData: [[serverConfigurationKey, {}]],
-      });
-      await app.settle();
-
-      await app.navigate({ to: "/leaderboards" });
-      await flush();
-
-      // straight from about, no loading page
-      expect(app.pagesInDom()).toEqual(["leaderboards"]);
     });
   });
 
@@ -317,8 +288,6 @@ describe("app shell routing", () => {
       const responses = [
         getContributorsQueryOptions().queryKey,
         getSupportersQueryOptions().queryKey,
-        getTypingStatsQueryOptions().queryKey,
-        getSpeedHistogramQueryOptions().queryKey,
       ].map(slowResponse);
       const app = renderApp({
         url: "/settings",
@@ -333,17 +302,10 @@ describe("app shell routing", () => {
       expect(responses.map((response) => response.started())).toEqual([
         true,
         true,
-        true,
-        true,
       ]);
     });
 
     it.each([
-      {
-        page: "leaderboards",
-        url: "/leaderboards",
-        keys: [serverConfigurationKey],
-      },
       {
         page: "profile",
         url: "/profile/bob",
@@ -373,18 +335,6 @@ describe("app shell routing", () => {
       },
     );
 
-    it("shows leaderboards on first load while the server configuration loads", async () => {
-      const configuration = slowResponse(serverConfigurationKey);
-      const app = renderApp({
-        url: "/leaderboards",
-        queryResponses: [configuration.response],
-      });
-      await app.settle();
-
-      expect(app.shownPage()).toBe("leaderboards");
-      expect(configuration.started()).toBe(true);
-    });
-
     it("keeps the loading page up until the account results are ready", async () => {
       const app = renderApp({ url: "/", auth: "signedIn", results: "pending" });
       await app.settle();
@@ -398,26 +348,6 @@ describe("app shell routing", () => {
       await app.settle();
 
       expect(app.shownPage()).toBe("account");
-    });
-
-    it("keeps the loading page up until the friends are ready", async () => {
-      const app = renderApp({
-        url: "/",
-        auth: "signedIn",
-        friends: "pending",
-        queryData: [[serverConfigurationKey, {}]],
-      });
-      await app.settle();
-
-      // resolves once the navigation finished loading
-      void app.navigate({ to: "/friends" });
-      await app.settle({ waitForRouter: false });
-      expect(app.shownPage()).toBe("loading");
-
-      app.blockingData.loadFriends();
-      await app.settle();
-
-      expect(app.shownPage()).toBe("friends");
     });
   });
 
@@ -435,76 +365,6 @@ describe("app shell routing", () => {
     });
     afterEach(() => {
       vi.useRealTimers();
-    });
-
-    // friends are downloaded, but their refetch on every visit hangs
-    async function slowFriendsNavigation(): Promise<App> {
-      const app = renderApp({
-        url: "/",
-        auth: "signedIn",
-        friendsRefresh: "pending",
-      });
-      await app.settle();
-      // resolves once the navigation finished loading
-      void app.navigate({ to: "/friends" });
-      return app;
-    }
-
-    it("shows the loading page with a spinner when a navigation takes longer than 500ms", async () => {
-      const app = await slowFriendsNavigation();
-
-      await vi.advanceTimersByTimeAsync(450);
-      expect(app.pagesInDom()).toEqual(["test"]);
-
-      await vi.advanceTimersByTimeAsync(100);
-      await app.settle({ waitForRouter: false });
-      expect(app.shownPage()).toBe("loading");
-      expect(app.loadingIndicator()).toBe("spinner");
-    });
-
-    it("lets the user navigate away while the spinner is shown", async () => {
-      const app = await slowFriendsNavigation();
-      await vi.advanceTimersByTimeAsync(500);
-      await app.settle({ waitForRouter: false });
-      expect(app.loadingIndicator()).toBe("spinner");
-
-      void app.navigate({ to: "/about" });
-      await vi.advanceTimersByTimeAsync(600);
-      await app.settle();
-
-      expect(app.url()).toBe("/about");
-      expect(app.shownPage()).toBe("about");
-    });
-
-    it("keeps the spinner at least 500ms once shown", async () => {
-      const app = await slowFriendsNavigation();
-      await vi.advanceTimersByTimeAsync(500);
-      await app.settle({ waitForRouter: false });
-      expect(app.shownPage()).toBe("loading");
-
-      // the navigation finishes right after the spinner showed
-      app.blockingData.refreshFriends();
-      await vi.advanceTimersByTimeAsync(400);
-      await app.settle({ waitForRouter: false });
-      expect(app.shownPage()).toBe("loading");
-
-      await vi.advanceTimersByTimeAsync(200);
-      await app.settle();
-      expect(app.shownPage()).toBe("friends");
-    });
-
-    it("shows no spinner for a navigation faster than 500ms", async () => {
-      const app = await slowFriendsNavigation();
-      await vi.advanceTimersByTimeAsync(300);
-      expect(app.pagesInDom()).toEqual(["test"]);
-      app.blockingData.refreshFriends();
-      await flush();
-
-      // straight from the test page to friends
-      expect(app.pagesInDom()).toEqual(["friends"]);
-      await vi.advanceTimersByTimeAsync(1000);
-      await app.settle();
-      expect(app.pagesInDom()).toEqual(["friends"]);
     });
 
     it("shows the loading bar, not the spinner, for a slow loading step", async () => {
@@ -526,27 +386,6 @@ describe("app shell routing", () => {
       await vi.advanceTimersByTimeAsync(500);
       await app.settle();
       expect(app.shownPage()).toBe("account");
-    });
-
-    it("shows the spinner for a slow navigation after one with a loading step", async () => {
-      const app = renderApp({
-        url: "/account",
-        auth: "signedIn",
-        results: "pending",
-        friendsRefresh: "pending",
-      });
-      await app.settle({ waitForRouter: false });
-      expect(app.loadingIndicator()).toBe("bar");
-      app.blockingData.loadResults();
-      await vi.advanceTimersByTimeAsync(500);
-      await app.settle();
-      expect(app.shownPage()).toBe("account");
-
-      void app.navigate({ to: "/friends" });
-      await vi.advanceTimersByTimeAsync(600);
-      await app.settle({ waitForRouter: false });
-      expect(app.shownPage()).toBe("loading");
-      expect(app.loadingIndicator()).toBe("spinner");
     });
   });
 
@@ -765,33 +604,24 @@ describe("app shell routing", () => {
       expect(app.pagesInDom()).toEqual(["settings"]);
     });
 
-    it.each(["results", "friends"] as const)(
-      "retries a failing %s download once before showing the error",
-      async (download) => {
-        const app = renderApp({
-          url: "/",
-          auth: "signedIn",
-          [download]: "pending",
-          queryData: [[serverConfigurationKey, {}]],
-        });
-        await app.settle();
-        void app.navigate({
-          to: download === "results" ? "/account" : "/friends",
-        });
-        await app.settle({ waitForRouter: false });
-        const before = app.blockingData.requests(download);
+    it("retries a failing results download once before showing the error", async () => {
+      const app = renderApp({
+        url: "/",
+        auth: "signedIn",
+        results: "pending",
+        queryData: [[serverConfigurationKey, {}]],
+      });
+      await app.settle();
+      void app.navigate({ to: "/account" });
+      await app.settle({ waitForRouter: false });
+      const before = app.blockingData.requests("results");
 
-        if (download === "results") {
-          app.blockingData.failResults(new Error("server is down"));
-        } else {
-          app.blockingData.failFriends(new Error("server is down"));
-        }
-        await app.settle();
+      app.blockingData.failResults(new Error("server is down"));
+      await app.settle();
 
-        expect(app.loadingIndicator()).toBe("error");
-        expect(app.blockingData.requests(download) - before).toBe(1);
-      },
-    );
+      expect(app.loadingIndicator()).toBe("error");
+      expect(app.blockingData.requests("results") - before).toBe(1);
+    });
 
     it("downloads the results again when an earlier download failed", async () => {
       const app = renderApp({ url: "/", auth: "signedIn", results: "pending" });
@@ -832,34 +662,6 @@ describe("app shell routing", () => {
       app.blockingData.loadResults();
       await app.settle();
       expect(app.pagesInDom()).toEqual(["account"]);
-    });
-
-    it("retries a failed friends download", async () => {
-      const app = renderApp({
-        url: "/",
-        auth: "signedIn",
-        friends: "pending",
-        queryData: [[serverConfigurationKey, {}]],
-      });
-      await app.settle();
-      void app.navigate({ to: "/friends" });
-      await app.settle({ waitForRouter: false });
-
-      app.blockingData.failFriends(new Error("server is down"));
-      await app.settle();
-      expect(app.pageElement()?.textContent).toContain(
-        "Failed to load the friends page: server is down",
-      );
-
-      retryButton(app).click();
-      await vi.waitFor(async () => {
-        await app.settle({ waitForRouter: false });
-        expect(app.loadingBar()?.text).toBe("Downloading friends...");
-      });
-
-      app.blockingData.loadFriends();
-      await app.settle();
-      expect(app.pagesInDom()).toEqual(["friends"]);
     });
   });
 
@@ -905,7 +707,7 @@ describe("app shell routing", () => {
       await app.settle();
       app.test.start();
 
-      void app.navigate({ to: "/leaderboards" });
+      void app.navigate({ to: "/about" });
       // the navigation starts after a few microtasks
       for (let i = 0; i < 10 && app.test.isRunning(); i++) {
         await Promise.resolve();
@@ -1010,15 +812,6 @@ describe("app shell routing", () => {
     ]);
   });
 
-  it("applies url actions after the /verify redirect", async () => {
-    __testing.clearNotificationHistory();
-    const app = renderApp({ url: "/verify?challenge=nope#top" });
-    await app.settle();
-
-    expect(app.url()).toBe("/#top");
-    expect(getNotificationHistory()).toHaveLength(1);
-  });
-
   it("applies no url actions on a hover", async () => {
     const app = renderApp({ url: "/about" });
     await app.settle();
@@ -1031,51 +824,11 @@ describe("app shell routing", () => {
     expect(getNotificationHistory()).toEqual([]);
   });
 
-  describe("the discord oauth redirect", () => {
-    let linkDiscord: MockInstance<typeof Ape.users.linkDiscord>;
-
-    beforeEach(() => {
-      linkDiscord = vi.spyOn(Ape.users, "linkDiscord").mockResolvedValue({
-        status: 200,
-        body: { message: "linked", data: {} },
-      } as never);
-    });
-    afterEach(() => {
-      linkDiscord.mockRestore();
-    });
-
-    // /verify: links started before the redirect moved to /
-    it.each(["/", "/verify"])(
-      "links discord from %s and drops the hash",
-      async (path) => {
-        const app = renderApp({
-          url: `${path}?foo=1#access_token=a&token_type=b&state=c`,
-        });
-        await app.settle();
-
-        expect(app.url()).toBe("/?foo=1");
-        expect(linkDiscord).toHaveBeenCalledWith({
-          body: { accessToken: "a", tokenType: "b", state: "c" },
-        });
-      },
-    );
-  });
-
-  it("redirects /verify to / keeping search and hash", async () => {
-    const app = renderApp({ url: "/verify?mode=verifyEmail&oobCode=abc#top" });
-    await app.settle();
-
-    expect(app.url()).toBe("/?mode=verifyEmail&oobCode=abc#top");
-    expect(app.shownPage()).toBe("test");
-  });
-
   describe("preloading", () => {
     it("starts about's background fetches when hovering a link to it", async () => {
       const responses = [
         getContributorsQueryOptions().queryKey,
         getSupportersQueryOptions().queryKey,
-        getTypingStatsQueryOptions().queryKey,
-        getSpeedHistogramQueryOptions().queryKey,
       ].map(slowResponse);
       const app = renderApp({
         url: "/settings",
@@ -1090,40 +843,7 @@ describe("app shell routing", () => {
       expect(responses.map((response) => response.started())).toEqual([
         true,
         true,
-        true,
-        true,
       ]);
-    });
-
-    it("starts the leaderboard and rank fetches of the hovered selection", async () => {
-      const selection = {
-        type: "allTime",
-        mode: "time",
-        mode2: "60",
-        language: "english",
-        friendsOnly: false,
-        previous: false,
-      } as const;
-      const entries = slowResponse(
-        getLeaderboardQueryOptions({ ...selection, page: 1 }).queryKey,
-      );
-      const rank = slowResponse(getRankQueryOptions(selection).queryKey);
-      const app = renderApp({
-        url: "/settings",
-        auth: "signedIn",
-        queryData: [[serverConfigurationKey, {}]],
-        queryResponses: [entries.response, rank.response],
-      });
-      await app.settle();
-
-      await app.hover({
-        to: "/leaderboards",
-        search: { type: "allTime", mode: "time", mode2: "60", page: 2 },
-      });
-
-      expect(app.shownPage()).toBe("settings");
-      expect(entries.started()).toBe(true);
-      expect(rank.started()).toBe(true);
     });
 
     it("switches preloading off and on from the debug handle", async () => {
@@ -1145,28 +865,22 @@ describe("app shell routing", () => {
       expect(contributors.started()).toBe(true);
     });
 
-    it.each([
-      { page: "account", url: "/account", results: "pending" },
-      { page: "friends", url: "/friends", friends: "pending" },
-    ] as const)(
-      "shows no loading page when hovering a link to $page while its data is missing",
-      async ({ url, ...blocking }) => {
-        const app = renderApp({
-          url: "/settings",
-          auth: "signedIn",
-          queryData: [[serverConfigurationKey, {}]],
-          ...blocking,
-        });
-        await app.settle();
+    it("shows no loading page when hovering a link to account while its data is missing", async () => {
+      const app = renderApp({
+        url: "/settings",
+        auth: "signedIn",
+        queryData: [[serverConfigurationKey, {}]],
+        results: "pending",
+      });
+      await app.settle();
 
-        await app.hover({ to: url });
-        await app.settle();
+      await app.hover({ to: "/account" });
+      await app.settle();
 
-        expect(app.pagesInDom()).toEqual(["settings"]);
-        expect(app.loadingBar()).toBeUndefined();
-        expect(app.url()).toBe("/settings");
-      },
-    );
+      expect(app.pagesInDom()).toEqual(["settings"]);
+      expect(app.loadingBar()).toBeUndefined();
+      expect(app.url()).toBe("/settings");
+    });
 
     it("starts the results download when hovering a link to account", async () => {
       const app = renderApp({
@@ -1194,53 +908,37 @@ describe("app shell routing", () => {
       expect(app.blockingData.requests("results")).toBe(1);
     });
 
-    it.each([
-      {
-        page: "account",
-        url: "/account",
+    it("keeps the loading page up when opening a hovered account while its data is missing", async () => {
+      const app = renderApp({
+        url: "/settings",
+        auth: "signedIn",
+        queryData: [[serverConfigurationKey, {}]],
         results: "pending",
-        text: "Downloading results...",
-        load: "loadResults",
-      },
-      {
-        page: "friends",
-        url: "/friends",
-        friends: "pending",
-        text: "Downloading friends...",
-        load: "loadFriends",
-      },
-    ] as const)(
-      "keeps the loading page up when opening a hovered $page while its data is missing",
-      async ({ page, url, text, load, ...blocking }) => {
-        const app = renderApp({
-          url: "/settings",
-          auth: "signedIn",
-          queryData: [[serverConfigurationKey, {}]],
-          ...blocking,
-        });
-        await app.settle();
+      });
+      await app.settle();
 
-        // clicked while the hover's preload (which runs no loading step) is
-        // still in flight: the navigation must still wait for the data
-        await app.hover({ to: url });
+      // clicked while the hover's preload (which runs no loading step) is
+      // still in flight: the navigation must still wait for the data
+      await app.hover({ to: "/account" });
 
-        // the preload ran no loading step: opening the page must still wait
-        app.click({ to: url });
-        await app.settle({ waitForRouter: false });
+      // the preload ran no loading step: opening the page must still wait
+      app.click({ to: "/account" });
+      await app.settle({ waitForRouter: false });
 
-        expect(app.shownPage()).toBe("loading");
-        expect(app.loadingBar()?.text).toBe(text);
-        expect(app.pagesInDom()).toEqual(["loading"]);
-        expect(app.pageMounts().map((mount) => mount.page)).not.toContain(page);
+      expect(app.shownPage()).toBe("loading");
+      expect(app.loadingBar()?.text).toBe("Downloading results...");
+      expect(app.pagesInDom()).toEqual(["loading"]);
+      expect(app.pageMounts().map((mount) => mount.page)).not.toContain(
+        "account",
+      );
 
-        app.blockingData[load]();
-        await flush();
-        expect(app.loadingBar()).toEqual({ width: "100%", text: "Done" });
-        await waitForDone();
-        await app.settle();
-        expect(app.shownPage()).toBe(page);
-      },
-    );
+      app.blockingData.loadResults();
+      await flush();
+      expect(app.loadingBar()).toEqual({ width: "100%", text: "Done" });
+      await waitForDone();
+      await app.settle();
+      expect(app.shownPage()).toBe("account");
+    });
 
     it("keeps the loading bar of a navigation when hovering a link while it loads", async () => {
       const userData = deferred();
@@ -1261,34 +959,6 @@ describe("app shell routing", () => {
 
       await app.settle();
       expect(app.shownPage()).toBe("test");
-    });
-
-    it("shows no spinner when hovering a link to a slow page", async () => {
-      vi.useFakeTimers({
-        toFake: [
-          "setTimeout",
-          "clearTimeout",
-          "Date",
-          "requestAnimationFrame",
-          "cancelAnimationFrame",
-        ],
-      });
-      // friends are downloaded, but their refetch on every visit hangs
-      const app = renderApp({
-        url: "/",
-        auth: "signedIn",
-        friendsRefresh: "pending",
-      });
-      await app.settle();
-
-      const hovered = app.hover({ to: "/friends" });
-      await vi.advanceTimersByTimeAsync(1000);
-      await hovered;
-      await app.settle({ waitForRouter: false });
-
-      expect(app.pagesInDom()).toEqual(["test"]);
-      expect(app.loadingIndicator()).toBeUndefined();
-      vi.useRealTimers();
     });
 
     it("keeps showing the profile when hovering a link to another profile", async () => {

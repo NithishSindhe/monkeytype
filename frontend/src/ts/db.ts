@@ -50,7 +50,6 @@ export function setSnapshot(
 ): void {
   const originalBanned = dbSnapshot?.banned;
   const originalVerified = dbSnapshot?.verified;
-  const lbOptOut = dbSnapshot?.lbOptOut;
 
   //not allowing user to override these values i guess?
   try {
@@ -59,14 +58,10 @@ export function setSnapshot(
   try {
     delete newSnapshot?.verified;
   } catch {}
-  try {
-    delete newSnapshot?.lbOptOut;
-  } catch {}
   dbSnapshot = newSnapshot;
   if (dbSnapshot) {
     dbSnapshot.banned = originalBanned;
     dbSnapshot.verified = originalVerified;
-    dbSnapshot.lbOptOut = lbOptOut;
   }
 
   if (options?.dispatchEvent !== false) {
@@ -108,28 +103,21 @@ export async function initSnapshot(): Promise<Snapshot | false> {
     }
 
     snap.banned = userData.banned;
-    snap.lbOptOut = userData.lbOptOut;
     snap.verified = userData.verified;
-    snap.discordId = userData.discordId;
-    snap.discordAvatar = userData.discordAvatar;
     snap.needsToChangeName = userData.needsToChangeName;
     snap.typingStats = {
       timeTyping: userData.timeTyping ?? 0,
       startedTests: userData.startedTests ?? 0,
       completedTests: userData.completedTests ?? 0,
     };
-    snap.quoteMod = userData.quoteMod;
     snap.favoriteQuotes = userData.favoriteQuotes ?? {};
-    snap.quoteRatings = userData.quoteRatings;
     snap.details = userData.profileDetails;
     snap.addedAt = userData.addedAt;
     snap.inventory = userData.inventory;
     snap.xp = userData.xp ?? 0;
-    snap.inboxUnreadSize = userData.inboxUnreadSize ?? 0;
     snap.streak = userData?.streak?.length ?? 0;
     snap.maxStreak = userData?.streak?.maxLength ?? 0;
     snap.isPremium = userData?.isPremium ?? false;
-    snap.allTimeLbs = userData.allTimeLbs;
 
     if (userData.testActivity !== undefined) {
       snap.testActivity = new ModifiableTestActivityCalendar(
@@ -141,10 +129,6 @@ export async function initSnapshot(): Promise<Snapshot | false> {
 
     const hourOffset = userData?.streak?.hourOffset;
     snap.streakHourOffset = hourOffset ?? undefined;
-
-    if (userData.lbMemory !== undefined) {
-      snap.lbMemory = userData.lbMemory;
-    }
 
     updateTagsInFilterStorage(userData.tags?.map((it) => it._id) ?? []);
 
@@ -263,42 +247,6 @@ function saveLocalPB<M extends Mode>(
   }
 }
 
-export async function updateLbMemory<M extends Mode>(
-  mode: M,
-  mode2: Mode2<M> | undefined,
-  language: Language,
-  rank: number,
-  api = false,
-): Promise<void> {
-  if (mode2 === undefined) return;
-  if (mode === "time") {
-    const timeMode = mode;
-    const timeMode2 = mode2 as "15" | "60";
-
-    const snapshot = getSnapshot();
-    if (!snapshot) return;
-    snapshot.lbMemory ??= {
-      time: { "15": { english: 0 }, "60": { english: 0 } },
-    };
-    snapshot.lbMemory[timeMode] ??= {
-      "15": { english: 0 },
-      "60": { english: 0 },
-    };
-    snapshot.lbMemory[timeMode][timeMode2] ??= {};
-    const current = snapshot.lbMemory?.[timeMode]?.[timeMode2]?.[language];
-
-    //this is protected above so not sure why it would be undefined
-    const mem = snapshot.lbMemory[timeMode][timeMode2];
-    mem[language] = rank;
-    if (api && current !== rank) {
-      await Ape.users.updateLeaderboardMemory({
-        body: { mode, mode2, language, rank },
-      });
-    }
-    setSnapshot(snapshot);
-  }
-}
-
 export type SaveLocalResultData = {
   xp?: number;
   xpBreakdown?: XpBreakdown;
@@ -388,14 +336,6 @@ export function addXp(xp: number, breakdown?: XpBreakdown): void {
     resultingXp: snapshot.xp,
     breakdown: breakdown,
   });
-}
-
-export function updateInboxUnreadSize(newSize: number): void {
-  const snapshot = getSnapshot();
-  if (!snapshot) return;
-
-  snapshot.inboxUnreadSize = newSize;
-  setSnapshot(snapshot);
 }
 
 export function addBadge(badge: Badge): void {

@@ -44,7 +44,6 @@ type ResultState = {
   tags: ResultTag[];
   // id of the saved result, empty until the server accepts it
   resultId: string;
-  dailyLeaderboardRank?: number;
   canRetrySaving: boolean;
   timeToday: string;
   crown: {

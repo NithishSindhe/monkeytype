@@ -53,12 +53,6 @@ export function createAppRouter(
   options: { history?: RouterHistory } = {},
 ) {
   const history = options.history ?? createBrowserHistory();
-  // TODO: remove once links started before the discord oauth redirect moved
-  // from /verify to / are gone (with its firebase.json rewrite)
-  if (history.location.pathname === "/verify") {
-    history.replace(history.location.href.replace(/^\/verify/, "/"));
-  }
-
   const router = createRouter({
     routeTree,
     context,
@@ -98,7 +92,7 @@ export function createAppRouter(
   router.history.block({
     enableBeforeUnload: false,
     blockerFn: ({ nextLocation }) => {
-      // a blocking load (user data, results, friends) holds the loading bar
+      // a blocking load (user data, results) holds the loading bar
       // up until "Done": the user waits for it. The slow navigation spinner
       // and the error page don't block
       if (isLoadingBarShown()) {

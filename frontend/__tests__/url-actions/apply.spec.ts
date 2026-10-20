@@ -4,7 +4,6 @@ import * as Notifications from "../../src/ts/states/notifications";
 import { applyUrlActions } from "../../src/ts/url-actions/apply";
 import { challengeAction } from "../../src/ts/url-actions/actions/challenge";
 import { customThemeAction } from "../../src/ts/url-actions/actions/custom-theme";
-import { discordTokenAction } from "../../src/ts/url-actions/actions/discord-oauth";
 import { testSettingsAction } from "../../src/ts/url-actions/actions/test-settings";
 
 vi.mock("../../src/ts/url-actions/actions/challenge", () => ({
@@ -27,15 +26,6 @@ vi.mock("../../src/ts/url-actions/actions/custom-theme", () => ({
     apply: vi.fn(),
   },
 }));
-vi.mock("../../src/ts/url-actions/actions/discord-oauth", () => ({
-  discordTokenAction: {
-    in: "hash",
-    param: "access_token",
-    failure: "Failed discordToken",
-    schema: z.record(z.string()),
-    apply: vi.fn(),
-  },
-}));
 vi.mock("../../src/ts/url-actions/actions/test-settings", () => ({
   testSettingsAction: {
     in: "search",
@@ -49,7 +39,6 @@ vi.mock("../../src/ts/url-actions/actions/test-settings", () => ({
 
 const applyChallenge = vi.mocked(challengeAction.apply);
 const applyCustomTheme = vi.mocked(customThemeAction.apply);
-const applyDiscordToken = vi.mocked(discordTokenAction.apply);
 const applyTestSettings = vi.mocked(testSettingsAction.apply);
 
 describe("applyUrlActions", () => {
@@ -92,21 +81,6 @@ describe("applyUrlActions", () => {
     applyUrlActions(location("?customTheme=YQ==&foo=1"));
 
     expect(applyCustomTheme).toHaveBeenCalledWith("YQ==");
-  });
-
-  it("drops the whole hash for a hash action, passing all its params", async () => {
-    const rest = applyUrlActions(
-      location("?foo=1", "access_token=a&token_type=b&state=c"),
-    );
-
-    expect(rest).toEqual({ search: { foo: "1" }, hash: "" });
-    await vi.waitFor(() =>
-      expect(applyDiscordToken).toHaveBeenCalledWith({
-        access_token: "a",
-        token_type: "b",
-        state: "c",
-      }),
-    );
   });
 
   it("applies the actions in table order, each once the one before is done", async () => {

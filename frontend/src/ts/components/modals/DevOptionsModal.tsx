@@ -5,7 +5,6 @@ import { z } from "zod";
 
 import Ape from "../../ape";
 import { signIn } from "../../auth";
-import { refetchInboxCollection } from "../../collections/inbox";
 import { addXp } from "../../db";
 import { toggleCaretDebug } from "../../elements/caret";
 import { getInputElement } from "../../input/input-element";
@@ -146,13 +145,6 @@ export function DevOptionsModal(): JSXElement {
       },
     },
     {
-      icon: "fa-inbox",
-      label: () => "Add Debug Inbox Item",
-      onClick: () => {
-        showModal("DevInboxPicker");
-      },
-    },
-    {
       icon: "fa-chart-bar",
       label: () => "Toggle Fake Chart Data",
       onClick: toggleFakeChartData,
@@ -183,61 +175,21 @@ export function DevOptionsModal(): JSXElement {
     },
   ];
 
-  const addDebugInboxItem = (rewardType: "xp" | "badge" | "none"): void => {
-    hideModal("DevInboxPicker");
-    void Ape.dev
-      .addDebugInboxItem({ body: { rewardType } })
-      .then((response) => {
-        if (response.status !== 200) {
-          showErrorNotification("Failed to add inbox item", {
-            details: response.body,
-          });
-          return;
-        }
-        showSuccessNotification("Debug inbox item added");
-        void refetchInboxCollection();
-      });
-  };
-
   return (
-    <>
-      <AnimatedModal id="DevOptions" title="Dev Options">
-        <div class="flex flex-col gap-4">
-          <For each={buttons}>
-            {(btn) => (
-              <Button
-                variant="button"
-                onClick={btn.onClick}
-                fa={{ icon: btn.icon, fixedWidth: true }}
-                text={btn.label()}
-              />
-            )}
-          </For>
-        </div>
-      </AnimatedModal>
-      <AnimatedModal id="DevInboxPicker" title="Choose Reward Type">
-        <div class="flex flex-col gap-4">
-          <Button
-            variant="button"
-            onClick={() => addDebugInboxItem("xp")}
-            fa={{ icon: "fa-star", fixedWidth: true }}
-            text="XP Reward (1000)"
-          />
-          <Button
-            variant="button"
-            onClick={() => addDebugInboxItem("badge")}
-            fa={{ icon: "fa-certificate", fixedWidth: true }}
-            text="Badge Reward"
-          />
-          <Button
-            variant="button"
-            onClick={() => addDebugInboxItem("none")}
-            fa={{ icon: "fa-envelope", fixedWidth: true }}
-            text="No Reward"
-          />
-        </div>
-      </AnimatedModal>
-    </>
+    <AnimatedModal id="DevOptions" title="Dev Options">
+      <div class="flex flex-col gap-4">
+        <For each={buttons}>
+          {(btn) => (
+            <Button
+              variant="button"
+              onClick={btn.onClick}
+              fa={{ icon: btn.icon, fixedWidth: true }}
+              text={btn.label()}
+            />
+          )}
+        </For>
+      </div>
+    </AnimatedModal>
   );
 }
 

@@ -106,15 +106,6 @@ export function EditProfile() {
         </div>
 
         <div>
-          <label class="mb-[0.25em] block text-sub">avatar</label>
-          <div>
-            To update your avatar make sure your Discord account is linked, then
-            go to Account Settings &gt; Account &gt; Discord Integration and
-            click &quot;Update Avatar&quot;
-          </div>
-        </div>
-
-        <div>
           <label class="mb-[0.25em] block text-sub">bio</label>
           <form.Field
             name="bio"

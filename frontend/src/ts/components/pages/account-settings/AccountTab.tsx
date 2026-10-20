@@ -1,98 +1,17 @@
-import { Show } from "solid-js";
-
-import Ape from "../../../ape";
-import { showLoaderBar } from "../../../states/loader-bar";
 import { showModal } from "../../../states/modals";
-import { showErrorNotification } from "../../../states/notifications";
 import { getSnapshot } from "../../../states/snapshot";
-import { Button } from "../../common/Button";
 import { Fa } from "../../common/Fa";
-import {
-  showOptOutOfLeaderboardsModal,
-  showResetPersonalBestsModal,
-} from "../../modals/account-settings/ReauthConfirmModals";
-import { showUnlinkDiscordModal } from "../../modals/account-settings/UnlinkDiscordModal";
+import { showResetPersonalBestsModal } from "../../modals/account-settings/ReauthConfirmModals";
 import { showUpdateNameModal } from "../../modals/account-settings/UpdateNameModal";
 import { Section } from "./utils";
 
 export function AccountTab() {
   return (
     <>
-      <Discord />
-
       <UpdateAccountName />
       <UpdateStreakOffset />
-      <OptOutLeaderboard />
       <ResetPersonalBests />
     </>
-  );
-}
-
-function Discord() {
-  const isLinked = () => getSnapshot()?.discordId !== undefined;
-  return (
-    <Section
-      title="discord integration"
-      fa={{ variant: "brand", icon: "fa-discord" }}
-      description=<>
-        When you connect your Monkeytype account to your Discord account, you
-        will be automatically assigned a new role every time you achieve a new
-        personal best in a 60 second test. If you link your accounts before
-        joining the Discord server, the bot <i>will not</i> give you a role.
-      </>
-      button={
-        isLinked()
-          ? undefined
-          : {
-              text: "link",
-              onClick: () => {
-                showLoaderBar();
-                void Ape.users.getDiscordOAuth().then((response) => {
-                  if (response.status === 200) {
-                    window.open(response.body.data.url, "_self");
-                  } else {
-                    showErrorNotification(
-                      `Failed to get OAuth from discord: ${response.body.message}`,
-                    );
-                  }
-                });
-              },
-            }
-      }
-    >
-      <Show when={isLinked()}>
-        <div class="m-4 flex h-full flex-col items-center justify-center gap-2">
-          <div class="text-main">
-            <Fa icon="fa-check" /> Your accounts are linked!
-          </div>
-          <div class="text-sm">
-            <Button
-              variant="text"
-              text="Update avatar"
-              fa={{ icon: "fa-sync-alt" }}
-              onClick={() => {
-                showLoaderBar();
-                void Ape.users.getDiscordOAuth().then((response) => {
-                  if (response.status === 200) {
-                    window.open(response.body.data.url, "_self");
-                  } else {
-                    showErrorNotification(
-                      `Failed to get OAuth from discord: ${response.body.message}`,
-                    );
-                  }
-                });
-              }}
-            />
-            <Button
-              variant="text"
-              text="Unlink"
-              fa={{ icon: "fa-unlink" }}
-              onClick={() => showUnlinkDiscordModal()}
-            />
-          </div>
-        </div>
-      </Show>
-    </Section>
   );
 }
 
@@ -134,29 +53,6 @@ function UpdateStreakOffset() {
         hour offset to{" "}
         {`${(getSnapshot()?.streakHourOffset ?? 0) > 0 ? "+" : ""} ${getSnapshot()?.streakHourOffset}`}
         .
-      </>
-    />
-  );
-}
-
-function OptOutLeaderboard() {
-  return (
-    <Section
-      title="opt out of leaderboards"
-      fa={{ icon: "fa-crown" }}
-      description=<>
-        Use this if you frequently trigger the anticheat (for example if using
-        stenography) to opt out of leaderboards.{" "}
-        <span class="text-error">You can&apos;t undo this action!</span>
-      </>
-      button={{
-        text: "opt out",
-        onClick: () => showOptOutOfLeaderboardsModal(),
-      }}
-      disabled={getSnapshot()?.lbOptOut === true}
-      disabledDescription=<>
-        <Fa icon="fa-exclamation-triangle" />
-        You have opted out of leaderboards.
       </>
     />
   );

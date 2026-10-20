@@ -8,42 +8,24 @@ import {
   type StaticDataRouteOption,
 } from "@tanstack/solid-router";
 
-import {
-  invalidateConnections,
-  isConnectionsReady,
-  waitForConnectionsReady,
-} from "../collections/connections";
 import { isResultsReady, waitForResultsReady } from "../collections/results";
 import { PageSwitcher } from "../components/core/PageSwitcher";
 import { AboutPage } from "../components/pages/AboutPage";
 import { AccountSettingsPage } from "../components/pages/account-settings/AccountSettingsPage";
 import { AccountPage } from "../components/pages/account/AccountPage";
-import { FriendsPage } from "../components/pages/connections/FriendsPage";
-import { LeaderboardPage } from "../components/pages/leaderboard/LeaderboardPage";
 import { LoginPage } from "../components/pages/login/LoginPage";
 import { createRouterPage } from "../components/core/Page";
 import { ProfilePage } from "../components/pages/profile/ProfilePage";
 import { ProfileSearchPage } from "../components/pages/profile/ProfileSearchPage";
 import { SettingsPage } from "../components/pages/settings/SettingsPage";
 import { TestPage } from "../components/pages/test/TestPage";
-import {
-  getLeaderboardQueryOptions,
-  getRankQueryOptions,
-} from "../queries/leaderboards";
 import { getUserProfile } from "../queries/profile";
 import {
   getContributorsQueryOptions,
-  getSpeedHistogramQueryOptions,
   getSupportersQueryOptions,
-  getTypingStatsQueryOptions,
 } from "../queries/public";
 import { getServerConfigurationQueryOptions } from "../queries/server-configuration";
 import { AccountSettingsSearchSchema } from "../states/account-settings";
-import {
-  getMissingLeaderboardSearch,
-  LeaderboardSearchSchema,
-  toSelection,
-} from "../states/leaderboard-selection";
 import { SettingsSearchSchema } from "../states/settings-highlight";
 import { getSnapshot } from "../states/snapshot";
 import * as TodayTracker from "../test/today-tracker";
@@ -68,9 +50,7 @@ export type PageName =
   | "profile"
   | "profileSearch"
   | "404"
-  | "accountSettings"
-  | "friends"
-  | "leaderboards";
+  | "accountSettings";
 
 declare module "@tanstack/solid-router" {
   // oxlint-disable-next-line typescript/consistent-type-definitions -- module augmentation needs an interface
@@ -208,48 +188,6 @@ const test = createRoute({
   },
 });
 
-const leaderboards = createRoute({
-  getParentRoute: () => userDataRoute,
-  path: "/leaderboards",
-  staticData: { page: "leaderboards" },
-  component: createRouterPage(LeaderboardPage),
-  validateSearch: LeaderboardSearchSchema,
-  // the loader reads the selection and page only: other search writes (eg.
-  // dropping goToUserPage) don't re-run it
-  loaderDeps: ({ search }) => ({
-    type: search.type,
-    mode: search.mode,
-    mode2: search.mode2,
-    language: search.language,
-    yesterday: search.yesterday,
-    lastWeek: search.lastWeek,
-    friendsOnly: search.friendsOnly,
-    page: search.page,
-  }),
-  beforeLoad: ({ search }) => {
-    const missing = getMissingLeaderboardSearch(search);
-    if (missing !== undefined) {
-      redirect({
-        to: "/leaderboards",
-        search: missing,
-        replace: true,
-        throw: true,
-      });
-    }
-  },
-  // background data: start the fetches, the page shows its section loaders
-  loader: ({ context: { queryClient, auth }, deps }) => {
-    const selection = toSelection(deps);
-    void queryClient.prefetchQuery(getServerConfigurationQueryOptions());
-    void queryClient.prefetchQuery(
-      getLeaderboardQueryOptions({ ...selection, page: (deps.page ?? 1) - 1 }),
-    );
-    if (auth.isSignedIn()) {
-      void queryClient.prefetchQuery(getRankQueryOptions(selection));
-    }
-  },
-});
-
 const about = createRoute({
   getParentRoute: () => userDataRoute,
   path: "/about",
@@ -259,8 +197,6 @@ const about = createRoute({
   loader: ({ context: { queryClient } }) => {
     void queryClient.prefetchQuery(getContributorsQueryOptions());
     void queryClient.prefetchQuery(getSupportersQueryOptions());
-    void queryClient.prefetchQuery(getTypingStatsQueryOptions());
-    void queryClient.prefetchQuery(getSpeedHistogramQueryOptions());
   },
 });
 
@@ -345,44 +281,9 @@ const profile = createRoute({
   },
 });
 
-const friends = createRoute({
-  getParentRoute: () => userDataRoute,
-  path: "/friends",
-  staticData: {
-    page: "friends",
-    loadingPage: {
-      isNeeded: () => !isConnectionsReady(),
-      keyframes: [
-        { percentage: 50, durationMs: 1500, text: "Downloading friends..." },
-        {
-          percentage: 50,
-          durationMs: 1500,
-          text: "Downloading friend requests...",
-        },
-      ],
-    },
-  },
-  component: createRouterPage(FriendsPage),
-  beforeLoad: ({ context }) => signedInOnly(context.auth),
-  // blocking data
-  loader: async (loader) => {
-    await runRouteLoadingStep(loader, async () => {
-      await Promise.all([
-        loader.context.queryClient.ensureQueryData(
-          getServerConfigurationQueryOptions(),
-        ),
-        waitForConnectionsReady(),
-      ]);
-    });
-    // refetched on every visit (not on a hover: no global side effects)
-    if (!loader.preload) await invalidateConnections();
-  },
-});
-
 export const routeTree = root.addChildren([
   userDataRoute.addChildren([
     test,
-    leaderboards,
     about,
     settings,
     login,
@@ -390,6 +291,5 @@ export const routeTree = root.addChildren([
     accountSettings,
     profileSearch,
     profile,
-    friends,
   ]),
 ]);

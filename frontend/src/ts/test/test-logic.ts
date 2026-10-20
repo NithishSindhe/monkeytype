@@ -20,7 +20,6 @@ import * as Replay from "../components/pages/test/result/replay";
 import { __nonReactive } from "../collections/tags";
 import * as TodayTracker from "./today-tracker";
 import * as ChallengeContoller from "../controllers/challenge-controller";
-import { clearQuoteStats } from "../states/quote-rate";
 import {
   getPbEligibility,
   getResultTags,
@@ -206,7 +205,6 @@ function resetTestState(): void {
   setBailedOut(false);
   PaceCaret.reset();
   setKoreanStatus(false);
-  clearQuoteStats();
   CompositionState.setComposing(false);
   CompositionState.setData("");
   Strings.clearWordDirectionCache();
@@ -998,12 +996,7 @@ export async function finish(difficultyFailed = false): Promise<void> {
     showNoticeNotification("Test invalid - raw");
     setIsTestInvalid(true);
     dontSave = true;
-  } else if (
-    (!DB.getSnapshot()?.lbOptOut &&
-      (completedEvent.acc < 75 || completedEvent.acc > 100)) ||
-    (DB.getSnapshot()?.lbOptOut === true &&
-      (completedEvent.acc < 50 || completedEvent.acc > 100))
-  ) {
+  } else if (completedEvent.acc < 75 || completedEvent.acc > 100) {
     showNoticeNotification("Test invalid - accuracy");
     setIsTestInvalid(true);
     dontSave = true;
@@ -1156,7 +1149,6 @@ async function showResult(
     details,
     tags: getResultTags(result, pbEligibility),
     resultId: "",
-    dailyLeaderboardRank: undefined,
     canRetrySaving: false,
   });
 
@@ -1321,7 +1313,6 @@ async function saveResult(
   }
 
   setResultState({
-    dailyLeaderboardRank: data.dailyLeaderboardRank,
     canRetrySaving: false,
   });
   if (isRetrying) {

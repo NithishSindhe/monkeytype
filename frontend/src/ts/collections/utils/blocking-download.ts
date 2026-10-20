@@ -1,6 +1,6 @@
 /**
  * A query collection a page waits for behind the loading bar (results,
- * friends). A failed query still marks the collection ready (with
+ * results). A failed query still marks the collection ready (with
  * `utils.isError`), so readiness alone doesn't tell a download succeeded.
  */
 type BlockingDownload = {

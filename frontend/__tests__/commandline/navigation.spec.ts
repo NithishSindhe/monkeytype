@@ -21,7 +21,6 @@ function createTestRouter(): ReturnType<typeof createRouter> {
   const root = createRootRoute();
   const paths = [
     "/",
-    "/leaderboards",
     "/about",
     "/settings",
     "/login",
@@ -64,7 +63,6 @@ describe("commandline navigation", () => {
 
   it.each([
     ["viewTypingPage", "/"],
-    ["viewLeaderboards", "/leaderboards"],
     ["viewSettings", "/settings"],
   ])("%s opens %s", async (id, href) => {
     expect(await execAndGetHref(id)).toBe(href);

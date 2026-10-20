@@ -1,13 +1,6 @@
 import { useQuery } from "@tanstack/solid-query";
-import {
-  createMemo,
-  createSignal,
-  JSXElement,
-  onCleanup,
-  Show,
-} from "solid-js";
+import { createSignal, JSXElement, onCleanup, Show } from "solid-js";
 
-import { usePendingConnectionsQuery } from "../../../collections/connections";
 import { restartTestEvent } from "../../../events/test";
 import { createEffectOn } from "../../../hooks/effects";
 import { useRefWithUtils } from "../../../hooks/useRefWithUtils";
@@ -26,7 +19,6 @@ import { getLevelFromTotalXp } from "../../../utils/levels";
 import { Anime } from "../../common/anime";
 import { AnimePresence } from "../../common/anime/AnimePresence";
 import { Button } from "../../common/Button";
-import { NotificationBubble } from "../../common/NotificationBubble";
 import { User } from "../../common/User";
 import { AccountMenu } from "./AccountMenu";
 import { AccountXpBar } from "./AccountXpBar";
@@ -35,8 +27,6 @@ export function Nav(): JSXElement {
   const [getAccountMenuOpen, setAccountMenuOpen] = createSignal(false);
   const isCoarse = () => window.matchMedia("(pointer: coarse)").matches;
   const [accountMenuRef, accountMenuEl] = useRefWithUtils<HTMLDivElement>();
-
-  const pendingConnections = usePendingConnectionsQuery();
 
   const handleClickOutside = (e: MouseEvent) => {
     const el = accountMenuEl();
@@ -60,17 +50,6 @@ export function Nav(): JSXElement {
     setAnimatedLevel(getLevelFromTotalXp(snapshot.xp ?? 0));
   });
 
-  const showFriendsNotificationBubble = createMemo((): boolean => {
-    return pendingConnections().length > 0;
-  });
-
-  const showAlertsNotificationBubble = createMemo((): boolean => {
-    const snapshot = getSnapshot();
-    if (snapshot === undefined) return false;
-
-    return snapshot.inboxUnreadSize > 0;
-  });
-
   const serverConfig = useQuery(() => getServerConfigurationQueryOptions());
   const showLoginButton = (): boolean =>
     serverConfig.data?.users.signUp ?? true;
@@ -91,18 +70,6 @@ export function Nav(): JSXElement {
         onClick={() => {
           if (getRoutePage() === "test") restartTestEvent.dispatch();
         }}
-      />
-      <Button
-        variant="text"
-        fa={{
-          icon: "fa-crown",
-          fixedWidth: true,
-        }}
-        dataset={{
-          "data-nav-item": "leaderboards",
-        }}
-        class={buttonClass()}
-        to="/leaderboards"
       />
       <Button
         variant="text"
@@ -141,13 +108,8 @@ export function Nav(): JSXElement {
         onClick={() => {
           showModal("Alerts");
         }}
-        class={cn(buttonClass(), "relative")}
-      >
-        <NotificationBubble
-          variant="fromCorner"
-          show={showAlertsNotificationBubble()}
-        />
-      </Button>
+        class={buttonClass()}
+      />
       <AnimePresence exitBeforeEnter>
         <Show
           when={getSnapshot()}
@@ -223,13 +185,10 @@ export function Nav(): JSXElement {
                     hideNameOnSmallScreens={true}
                     level={getAnimatedLevel()}
                     showSpinner={getAccountButtonSpinner()}
-                    showNotificationBubble={showFriendsNotificationBubble()}
                     fontClass="text-em-xs"
                   />
                 </Button>
-                <AccountMenu
-                  showFriendsNotificationBubble={showFriendsNotificationBubble()}
-                />
+                <AccountMenu />
               </div>
               <div class="relative">
                 <AccountXpBar />

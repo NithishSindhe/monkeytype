@@ -2,8 +2,6 @@ import { lastElementFromArray } from "./arrays";
 import { Config } from "@monkeytype/schemas/configs";
 import { Mode, Mode2, PersonalBests } from "@monkeytype/schemas/shared";
 import { Result } from "@monkeytype/schemas/results";
-import { RankAndCount } from "@monkeytype/schemas/users";
-import { roundTo2 } from "@monkeytype/util/numbers";
 import { animate, AnimationParams } from "animejs";
 import { ElementWithUtils } from "./dom";
 import { isDevEnvironment } from "./env";
@@ -641,13 +639,6 @@ export function scrollToTop(): void {
     top: 0,
     behavior: "smooth",
   });
-}
-
-export function formatTopPercentage(lbRank?: RankAndCount): string {
-  if (lbRank === undefined) return "";
-  if (lbRank.rank === undefined) return "-";
-  if (lbRank.rank === 1) return "GOAT";
-  return `Top ${roundTo2((lbRank.rank / lbRank.count) * 100)}%`;
 }
 
 export function formatTypingStatsRatio(stats: {
