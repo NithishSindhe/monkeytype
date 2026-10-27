@@ -50,17 +50,33 @@
     },
     "@monkeytype/frontend#build": {
       "dependsOn": ["^build"],
-      "env": ["BACKEND_URL", "RECAPTCHA_SITE_KEY", "SENTRY"],
+      "env": [
+        "BACKEND_URL",
+        "CLERK_PUBLISHABLE_KEY",
+        "SENTRY",
+        "SENTRY_AUTH_TOKEN"
+      ],
       "outputs": ["dist/**"]
     },
     "@monkeytype/frontend#dev": {
       "dependsOn": ["^build"],
-      "env": ["BACKEND_URL", "RECAPTCHA_SITE_KEY", "SERVER_OPEN"],
+      "env": [
+        "BACKEND_URL",
+        "CLERK_PUBLISHABLE_KEY",
+        "SERVER_OPEN",
+        "QUICK_LOGIN_EMAIL",
+        "QUICK_LOGIN_PASSWORD"
+      ],
       "persistent": true
     },
     "@monkeytype/backend#dev": {
       "dependsOn": ["^build"],
-      "env": ["DB_URI", "REDIS_URI", "PORT"],
+      "env": [
+        "DATABASE_URL",
+        "CLERK_SECRET_KEY",
+        "CLERK_PUBLISHABLE_KEY",
+        "PORT"
+      ],
       "persistent": true
     }
   }
