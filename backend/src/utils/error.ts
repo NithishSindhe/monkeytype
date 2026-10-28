@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 import { isDevEnvironment } from "./misc";
 import { MonkeyServerErrorType } from "@monkeytype/contracts/util/api";
 
@@ -35,7 +35,7 @@ class MonkeyError extends Error implements MonkeyServerErrorType {
   constructor(status: number, message?: string, stack?: string, uid?: string) {
     super(message);
     this.status = status ?? 500;
-    this.errorId = uuidv4();
+    this.errorId = randomUUID();
     this.stack = stack;
     this.uid = uid;
 

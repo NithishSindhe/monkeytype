@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 import Logger from "../utils/logger";
 import MonkeyError, { getErrorMessage } from "../utils/error";
 import { incrementBadAuth } from "./rate-limit";
@@ -28,7 +28,7 @@ async function errorHandlingMiddleware(
     const monkeyError = error as MonkeyError;
     let status = 500;
     const data: { errorId?: string; uid: string } = {
-      errorId: monkeyError.errorId ?? uuidv4(),
+      errorId: monkeyError.errorId ?? randomUUID(),
       uid: monkeyError.uid ?? req.ctx?.decodedToken?.uid,
     };
     let message = "Unknown error";
