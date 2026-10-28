@@ -38,11 +38,32 @@ static files and the backend runs as a single serverless function under `/api`.
    | `BACKEND_URL` | `https://<your domain>/api` |
    | `FRONTEND_URL` | `https://<your domain>` |
    | `MODE` | `prod` |
+   | `BYPASS_ANTICHEAT` | `true` |
 
    `CLERK_PUBLISHABLE_KEY` and `BACKEND_URL` are read at build time and baked
    into the frontend, so changing them needs a redeploy.
 
+   The anticheat module is closed source and not part of this repository.
+   Without `BYPASS_ANTICHEAT=true` the api exits on startup outside of dev mode
+   and every `/api` request fails with `FUNCTION_INVOCATION_FAILED`. Do not set
+   `MODE=dev` instead, it enables the dev endpoints and uid authentication.
+
 5. **Domain.** Add the domain in Vercel and point its DNS at Vercel.
+
+6. **Server configuration.** The `configuration` table is seeded from
+   `BASE_CONFIGURATION` on the first api request, which has sign up and result
+   saving turned off. After the first request, enable them in the Neon console:
+
+   ```sql
+   update configuration
+   set value = jsonb_set(jsonb_set(value, '{users,signUp}', 'true'),
+                         '{results,savingEnabled}', 'true')
+   where id = true;
+   ```
+
+   Other features (profiles, xp, favorite quotes, filter presets) can be turned
+   on the same way. Warm instances refresh the configuration every 10 minutes,
+   a redeploy picks it up immediately.
 
 ## Notes
 
