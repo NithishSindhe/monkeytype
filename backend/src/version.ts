@@ -30,7 +30,11 @@ function getVersion(): string {
   }
 
   const serverVersion = `${getDateVersion()}_${COMMIT_HASH}`;
-  writeFileSync(SERVER_VERSION_FILE_PATH, serverVersion);
+  try {
+    writeFileSync(SERVER_VERSION_FILE_PATH, serverVersion);
+  } catch {
+    // read only filesystem (vercel), the version is just not persisted
+  }
 
   return serverVersion;
 }

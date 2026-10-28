@@ -52,33 +52,42 @@ const fileFormat = format.combine(timestampFormat, simpleOutputFormat);
 
 const consoleFormat = format.combine(timestampFormat, coloredOutputFormat);
 
+// the vercel filesystem is read only, it collects console output instead
+const logToFiles = process.env["VERCEL"] === undefined;
+
 const logger = createLogger({
   levels: customLevels,
   transports: [
-    new transports.File({
-      level: "error",
-      filename: resolve(logFolderPath, "error.log"),
-      maxsize: maxLogSize,
-      format: fileFormat,
-    }),
-    new transports.File({
-      level: "success",
-      filename: resolve(logFolderPath, "combined.log"),
-      maxsize: maxLogSize,
-      format: fileFormat,
-    }),
+    ...(logToFiles
+      ? [
+          new transports.File({
+            level: "error",
+            filename: resolve(logFolderPath, "error.log"),
+            maxsize: maxLogSize,
+            format: fileFormat,
+          }),
+          new transports.File({
+            level: "success",
+            filename: resolve(logFolderPath, "combined.log"),
+            maxsize: maxLogSize,
+            format: fileFormat,
+          }),
+        ]
+      : []),
     new transports.Console({
       level: "success",
       format: consoleFormat,
       handleExceptions: true,
     }),
   ],
-  exceptionHandlers: [
-    new transports.File({
-      filename: resolve(logFolderPath, "exceptions.log"),
-      format: fileFormat,
-    }),
-  ],
+  exceptionHandlers: logToFiles
+    ? [
+        new transports.File({
+          filename: resolve(logFolderPath, "exceptions.log"),
+          format: fileFormat,
+        }),
+      ]
+    : [],
 });
 
 const Logger = {
